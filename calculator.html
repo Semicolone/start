@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>덧셈 계산기</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      max-width: 500px;
+      margin: 80px auto;
+      padding: 20px;
+      text-align: center;
+    }
+
+    h1 {
+      margin-bottom: 30px;
+    }
+
+    input {
+      width: 120px;
+      padding: 10px;
+      margin: 10px;
+      font-size: 16px;
+    }
+
+    button {
+      padding: 10px 20px;
+      font-size: 16px;
+      cursor: pointer;
+      margin-top: 10px;
+    }
+
+    #result {
+      margin-top: 25px;
+      font-size: 20px;
+      font-weight: bold;
+    }
+
+    #error {
+      margin-top: 15px;
+      color: red;
+    }
+  </style>
+</head>
+<body>
+  <h1>덧셈 계산기</h1>
+
+  <div>
+    <input type="number" id="num1" placeholder="첫 번째 숫자" />
+    <input type="number" id="num2" placeholder="두 번째 숫자" />
+  </div>
+
+  <button onclick="calculate()">계산하기</button>
+
+  <div id="result"></div>
+  <div id="error"></div>
+
+  <script>
+    async function calculate() {
+      const num1 = document.getElementById("num1").value;
+      const num2 = document.getElementById("num2").value;
+      const resultEl = document.getElementById("result");
+      const errorEl = document.getElementById("error");
+
+      resultEl.textContent = "";
+      errorEl.textContent = "";
+
+      if (num1 === "" || num2 === "") {
+        errorEl.textContent = "숫자 두 개를 모두 입력해주세요."; 
+        return;
+      }
+
+      try {
+        const response = await fetch(`/api/add?a=${num1}&b=${num2}`);
+        const data = await response.json();
+
+        if (!response.ok) {
+          errorEl.textContent = data.error || "오류가 발생했습니다.";
+          return;
+        }
+
+        resultEl.textContent = `결과: ${data.result}`;
+      } catch (error) {
+        errorEl.textContent = "서버 호출 중 오류가 발생했습니다.";
+      }
+    }
+  </script>
+</body>
+</html>
