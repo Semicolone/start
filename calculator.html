@@ -5,56 +5,107 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>덧셈 계산기</title>
   <style>
+    * {
+      box-sizing: border-box;
+    }
+
     body {
+      margin: 0;
+      min-height: 100vh;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      background: #f5f7fb;
       font-family: Arial, sans-serif;
-      max-width: 500px;
-      margin: 80px auto;
-      padding: 20px;
+    }
+
+    .container {
+      width: 100%;
+      max-width: 420px;
+      background: white;
+      border-radius: 20px;
+      padding: 32px 24px;
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.08);
       text-align: center;
     }
 
     h1 {
-      margin-bottom: 30px;
+      margin: 0 0 10px;
+      font-size: 28px;
+      color: #222;
+    }
+
+    .subtitle {
+      margin-bottom: 28px;
+      color: #666;
+      font-size: 14px;
+    }
+
+    .input-group {
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+      margin-bottom: 20px;
     }
 
     input {
-      width: 120px;
-      padding: 10px;
-      margin: 10px;
+      width: 100%;
+      padding: 14px 16px;
+      border: 1px solid #dcdfe6;
+      border-radius: 12px;
       font-size: 16px;
+      outline: none;
     }
 
     button {
-      padding: 10px 20px;
+      width: 100%;
+      padding: 14px;
+      border: none;
+      border-radius: 12px;
+      background: #4a90e2;
+      color: white;
       font-size: 16px;
-      cursor: pointer;
-      margin-top: 10px;
-    }
-
-    #result {
-      margin-top: 25px;
-      font-size: 20px;
       font-weight: bold;
+      cursor: pointer;
     }
 
-    #error {
-      margin-top: 15px;
-      color: red;
+    .result-box {
+      margin-top: 22px;
+      padding: 16px;
+      border-radius: 12px;
+      background: #f1f6ff;
+      min-height: 56px;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      font-size: 18px;
+      font-weight: bold;
+      color: #1f3c68;
+    }
+
+    .error {
+      margin-top: 12px;
+      font-size: 14px;
+      color: #d93025;
+      min-height: 20px;
     }
   </style>
 </head>
 <body>
-  <h1>덧셈 계산기</h1>
+  <div class="container">
+    <h1>덧셈 계산기</h1>
+    <div class="subtitle">숫자 두 개를 입력하고 결과를 확인하세요</div>
 
-  <div>
-    <input type="number" id="num1" placeholder="첫 번째 숫자" />
-    <input type="number" id="num2" placeholder="두 번째 숫자" />
+    <div class="input-group">
+      <input type="number" id="num1" placeholder="첫 번째 숫자" />
+      <input type="number" id="num2" placeholder="두 번째 숫자" />
+    </div>
+
+    <button onclick="calculate()">계산하기</button>
+
+    <div class="result-box" id="result">결과가 여기에 표시됩니다</div>
+    <div class="error" id="error"></div>
   </div>
-
-  <button onclick="calculate()">계산하기</button>
-
-  <div id="result"></div>
-  <div id="error"></div>
 
   <script>
     async function calculate() {
@@ -63,11 +114,11 @@
       const resultEl = document.getElementById("result");
       const errorEl = document.getElementById("error");
 
-      resultEl.textContent = "";
       errorEl.textContent = "";
+      resultEl.textContent = "결과가 여기에 표시됩니다";
 
       if (num1 === "" || num2 === "") {
-        errorEl.textContent = "숫자 두 개를 모두 입력해주세요."; 
+        errorEl.textContent = "숫자 두 개를 모두 입력해주세요.";
         return;
       }
 
@@ -82,7 +133,7 @@
 
         resultEl.textContent = `결과: ${data.result}`;
       } catch (error) {
-        errorEl.textContent = "서버 호출 중 오류가 발생했습니다.";
+        errorEl.textContent = "서버 연결 중 오류가 발생했습니다.";
       }
     }
   </script>
