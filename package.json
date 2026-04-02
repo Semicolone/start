@@ -1,0 +1,11 @@
+{
+  "name": "calculator-project",
+  "version": "1.0.0",
+  "description": "",
+  "main": "api/index.js",
+  "dependencies": {
+    "dotenv": "^17.4.0",
+    "express": "^4.22.1",
+    "pg": "^8.20.0"
+  }
+}
