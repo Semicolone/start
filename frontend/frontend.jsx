@@ -1,4 +1,5 @@
-import React, { useMemo, useState } from "react";
+// CDN 환경에서는 React를 전역 변수에서 가져옵니다.
+const { useMemo, useState } = React;
 
 /**
  * React 18 + Fetch API
@@ -36,7 +37,7 @@ function cleanKeywords(input) {
   return dedup;
 }
 
-export default function InsightGeneratePage() {
+function InsightGeneratePage() {
   const [selectedAI, setSelectedAI] = useState("chatgpt");
   const [question, setQuestion] = useState("");
   const [answer, setAnswer] = useState("");
