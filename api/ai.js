@@ -1,13 +1,13 @@
 // api/ai.js
-const express = require('express');    // 라우터 설정을 위해 Express를 가져옵니다.
-const router = express.Router();       // 별도의 라우터 객체를 생성합니다.
-const { Pool } = require('pg');        // DB 저장을 위해 PostgreSQL 풀을 가져옵니다.
-const Groq = require('groq-sdk');     // Groq Cloud SDK(Llama 모델 사용을 위함)
+const express = require('express');
+const router = express.Router();
+const { Pool } = require('pg');
+const Groq = require('groq-sdk');
 
-const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });    // API 키 인증
+const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
 
 const pool = new Pool({
-  connectionString: process.env.DATABASE_URL, // .env에 정의된 DB 연결 URL 사용
+  connectionString: process.env.DATABASE_URL,
   ssl: { rejectUnauthorized: false }
 });
 
@@ -16,15 +16,14 @@ router.post('/analyze', async (req, res) => {
   try {
     const { question, answer } = req.body;
 
-    // 필수 데이터(질문과 답변)가 본문에 있는지 확인합니다.
     if (!question || !answer) {
       return res.status(400).json({ error: "질문과 답변을 모두 입력해주세요." });
     }
 
-    // 1. Groq API로 요약 및 키워드 추출 (Prompt Engineering)
+    // 1. Groq API로 요약 및 키워드 추출
     const chatCompletion = await groq.chat.completions.create({
-      model: 'llama-3.3-70b-versatile',   // 최신 고성능 모델 사용
-      response_format: { type: 'json_object' },   // 반드시 JSON으로 응답받도록 강제
+      model: 'llama-3.3-70b-versatile',
+      response_format: { type: 'json_object' },
       messages: [
         {
           role: 'system',
@@ -37,24 +36,23 @@ router.post('/analyze', async (req, res) => {
       ]
     });
 
-    // 1-1. AI 응답 처리: Groq에서 받은 JSON 문자열을 JSON.parse()를 통해 JS 객체로 역직렬화(Deserialization)합니다.
     const parsed = JSON.parse(chatCompletion.choices[0].message.content);
-    const qs = parsed.question_summary;  // AI가 생성한 질문의 핵심 요약 (한 문장)
-    const as = parsed.answer_summary;    // AI가 생성한 답변의 핵심 인사이트 (2~3문장)
-    const kw = parsed.keywords;          // 분석된 핵심 키워드 배열 (최대 5개)
+    const qs = parsed.question_summary;
+    const as = parsed.answer_summary;
+    const kw = parsed.keywords;
 
-    // 2. 데이터 영속화(Persistence): 분석 결과를 PostgreSQL DB에 저장하여 추후 '분석 히스토리' 조회 시 사용합니다.
+    // 2. 분석 결과 DB 저장
     const insertQuery = `
-      INSERT INTO ai_logs (question, answer, q_summary, a_summary, keywords) 
+      INSERT INTO ai_logs (question, answer, q_summary, a_summary, keywords)
       VALUES ($1, $2, $3, $4, $5)
     `;
-    await pool.query(insertQuery, [question.trim(), answer.trim(), qs, as, JSON.stringify(kw)]); // DB에 최종 저장합니다.
+    await pool.query(insertQuery, [question.trim(), answer.trim(), qs, as, JSON.stringify(kw)]);
 
     // 3. 프론트엔드로 결과 반환
     res.json({
-      question_summary: qs,              // 클라이언트에 질문 요약 전달
-      answer_summary: as,                // 클라이언트에 답변 요약 전달
-      keywords: kw                       // 클라이언트에 키워드 전달
+      question_summary: qs,
+      answer_summary: as,
+      keywords: kw
     });
 
   } catch (err) {
@@ -66,13 +64,12 @@ router.post('/analyze', async (req, res) => {
 // 분석된 과거 로그 리스트 가져오기
 router.get('/logs', async (req, res) => {
   try {
-    const result = await pool.query('SELECT * FROM ai_logs ORDER BY id DESC'); // ai_logs 테이블 조회
-    res.json(result.rows);                                                     // 조회 결과 반환
+    const result = await pool.query('SELECT * FROM ai_logs ORDER BY id DESC');
+    res.json(result.rows);
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'DB 로그를 불러오는 중 오류가 발생했습니다.' });
   }
 });
 
-// 이 라우터를 밖에서 쓸 수 있게 내보냄
 module.exports = router;
