@@ -1,4 +1,5 @@
-import React, { useMemo, useState } from "react";
+// CDN 환경에서는 React를 전역 변수에서 가져옵니다.
+const { useMemo, useState } = React;    // 성능 최적화(useMemo)와 상태 관리(useState) 훅을 가져옵니다.
 
 /**
  * React 18 + Fetch API
@@ -14,20 +15,21 @@ const AI_LINKS = {
   other: "https://www.perplexity.ai/",
 };
 
+// AI로부터 받은 키워드를 깔끔하게 정리하는 헬퍼 함수입니다.
 function cleanKeywords(input) {
   let arr = [];
-  if (Array.isArray(input)) arr = input;
-  else if (typeof input === "string") arr = input.split(/[,#\n]/g);
+  if (Array.isArray(input)) arr = input; // 배열이면 그대로 사용
+  else if (typeof input === "string") arr = input.split(/[,#\n]/g); // 문자열이면 구분자로 나눔
 
   arr = arr
-    .map((k) => String(k).trim().replace(/^#+/, ""))
-    .filter((k) => k.length > 0);
+    .map((k) => String(k).trim().replace(/^#+/, "")) // 불필요한 공백과 # 제거
+    .filter((k) => k.length > 0); // 빈 키워드 제거
 
   // 중복 제거(순서 유지)
   const seen = new Set();
   const dedup = [];
   for (const k of arr) {
-    const key = k.toLowerCase();
+    const key = k.toLowerCase(); // 대소문자 구분 없이 중복 체크
     if (!seen.has(key)) {
       seen.add(key);
       dedup.push(k);
@@ -36,34 +38,33 @@ function cleanKeywords(input) {
   return dedup;
 }
 
-export default function InsightGeneratePage() {
-  const [selectedAI, setSelectedAI] = useState("chatgpt");
-  const [question, setQuestion] = useState("");
-  const [answer, setAnswer] = useState("");
+function InsightGeneratePage() {
+  // React 상태(State) 변수들: 값이 변하면 화면이 자동으로 다시 그려집니다.
+  const [selectedAI, setSelectedAI] = useState("chatgpt"); // 선택된 AI 탭 관리
+  const [question, setQuestion] = useState("");           // 사용자 입력 질문
+  const [answer, setAnswer] = useState("");               // 사용자 입력 답변
 
-  const [loading, setLoading] = useState(false);
-  const [errorMsg, setErrorMsg] = useState("");
+  const [loading, setLoading] = useState(false);          // 서버 통신 중 로딩 상태 표시
+  const [errorMsg, setErrorMsg] = useState("");           // 에러 메시지 저장
 
-  const [questionSummary, setQuestionSummary] = useState("");
-  const [answerSummary, setAnswerSummary] = useState("");
-  const [keywords, setKeywords] = useState([]);
+  const [questionSummary, setQuestionSummary] = useState(""); // 서버에서 받은 질문 요약
+  const [answerSummary, setAnswerSummary] = useState("");     // 서버에서 받은 답변 요약
+  const [keywords, setKeywords] = useState([]);               // 서버에서 받은 키워드들
 
+  // 질문과 답변이 입력되었고 로딩 중이 아닐 때만 버튼을 활성화합니다.
   const canSubmit = useMemo(() => {
     return question.trim().length > 0 && answer.trim().length > 0 && !loading;
   }, [question, answer, loading]);
 
+  // 상단 AI 탭 클릭 시 해당 사이트를 새 창으로 엽니다.
   const onClickAI = (key) => {
     setSelectedAI(key);
     window.open(AI_LINKS[key], "_blank", "noopener,noreferrer");
   };
 
+  // '인사이트 생성하기' 버튼 클릭 시 서버로 데이터를 보내는 함수입니다.
   const onGenerate = async () => {
     setErrorMsg("");
-
-    if (!question.trim() || !answer.trim()) {
-      setErrorMsg("질문/답변을 모두 입력(또는 붙여넣기)해 주세요.");
-      return;
-    }
 
     setQuestionSummary("");
     setAnswerSummary("");
@@ -71,7 +72,7 @@ export default function InsightGeneratePage() {
     setLoading(true);
 
     try {
-      const res = await fetch("/ai/analyze", {
+      const res = await fetch("/ai/analyze", { // 백엔드의 /ai/analyze 엔드포인트 호출
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -81,17 +82,17 @@ export default function InsightGeneratePage() {
       });
 
       if (!res.ok) {
-        const text = await res.text().catch(() => "");
+        const text = await res.text().catch(() => ""); // 에러 발생 시 에러 내용 추출
         throw new Error(text || `분석 실패 (${res.status})`);
       }
 
-      const data = await res.json();
+      const data = await res.json(); // 서버에서 보낸 결과를 JSON 객체로 받음
 
       const qs = (data?.question_summary ?? "").toString().trim();
       const as = (data?.answer_summary ?? "").toString().trim();
       const kw = cleanKeywords(data?.keywords);
 
-      if (!qs || !as) {
+      if (!qs || !as) { // 필수 요약 데이터가 누락된 경우 처리
         throw new Error("요약 결과 형식이 올바르지 않아요. (question_summary/answer_summary 필요)");
       }
 
@@ -106,6 +107,7 @@ export default function InsightGeneratePage() {
   };
 
   return (
+    // JSX 구조: HTML과 유사한 코드로 UI를 구성합니다.
     <div style={styles.page}>
       <div style={styles.aiTabs}>
         <button

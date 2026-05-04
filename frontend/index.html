@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Insight Demo</title>
+    <!-- React 및 Babel CDN (빌드 없이 JSX를 실행하기 위함) -->
+    <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+</head>
+<body>
+    <!-- React 앱이 렌더링될 대상 엘리먼트 -->
+    <div id="root"></div>
+    
+    <!-- 1. JSX 파일을 불러와서 변환 -->
+    <script type="text/babel">
+        // 여기서 직접 실행하지 않고, frontend.jsx 로드 후에 실행되도록 합니다.
+    </script>
+    <script type="text/babel" src="./frontend.jsx"></script>
+
+    <!-- 2. 로드된 컴포넌트를 실제 DOM에 연결 -->
+    <script type="text/babel">
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<InsightGeneratePage />);
+    </script>
+
+    <style>
+        body { margin: 0; padding: 0; background-color: #f5f5f5; }
+    </style>
+</body>
+</html>
