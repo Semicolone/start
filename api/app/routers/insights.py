@@ -14,8 +14,13 @@ router = APIRouter(prefix="/api/insights", tags=["insights"])
 
 @router.post("/analyze", response_model=AnalyzeResponse)
 def analyze_insight(request: AnalyzeRequest, current_user=Depends(get_current_user)):
-    # TODO: Groq API 호출하여 AI 분석
-    pass
+    from app.services.ai import analyze_with_groq
+    result = analyze_with_groq(request.question, request.answer)
+    return AnalyzeResponse(
+        question_summary=result["question_summary"],
+        answer_summary=result["answer_summary"],
+        keywords=result["keywords"],
+    )
 
 
 @router.post("", response_model=InsightResponse, status_code=201)
