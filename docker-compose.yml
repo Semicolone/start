@@ -1,6 +1,19 @@
 version: '3.8'
 
 services:
+  db:
+    image: postgres:15
+    container_name: flow-db
+    environment:
+      POSTGRES_USER: flowuser
+      POSTGRES_PASSWORD: flowpassword
+      POSTGRES_DB: flowdb
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    restart: unless-stopped
+
   api:
     build: ./api
     container_name: flow-api
@@ -10,4 +23,10 @@ services:
       - ./api/app:/app/app
     environment:
       - DEBUG=True
+      - DATABASE_URL=postgresql://flowuser:flowpassword@db:5432/flowdb
+    depends_on:
+      - db
     restart: unless-stopped
+
+volumes:
+  postgres_data:
