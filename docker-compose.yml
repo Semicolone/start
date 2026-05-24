@@ -21,6 +21,8 @@ services:
       - "8000:8000"
     volumes:
       - ./api/app:/app/app
+    env_file:
+      - .env
     environment:
       - DEBUG=True
       - DATABASE_URL=postgresql://flowuser:flowpassword@db:5432/flowdb
