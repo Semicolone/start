@@ -1,5 +1,9 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from app.database import engine, Base
+from app.routers import insights, home
+
+Base.metadata.create_all(bind=engine)
 
 app = FastAPI(title="FLOW API")
 
@@ -11,6 +15,10 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+app.include_router(insights.router)
+app.include_router(home.router)
+
+
 @app.get("/")
 def read_root():
     return {
@@ -19,10 +27,7 @@ def read_root():
         "version": "1.0.0"
     }
 
+
 @app.get("/health")
 def health_check():
     return {"status": "healthy"}
-
-@app.get("/api/test")
-def test_endpoint():
-    return {"message": "Test endpoint working!"}
