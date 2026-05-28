@@ -1,6 +1,8 @@
 # Python
 __pycache__/
+*.pyc
 *.py[cod]
+*.pyo
 .venv/
 venv/
 *.egg-info/
@@ -17,6 +19,9 @@ npm-debug.log*
 .env
 .env.local
 .env.*.local
+
+# DB
+app.db
 
 # OS
 .DS_Store
