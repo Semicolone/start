@@ -1,7 +1,32 @@
+# Python
 __pycache__/
 *.pyc
+*.py[cod]
 *.pyo
-.env
-app.db
+.venv/
 venv/
+*.egg-info/
+dist/
+build/
+
+# Node.js / React Native
+node_modules/
+.expo/
+*.log
+npm-debug.log*
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# DB
+app.db
+
+# OS
 .DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
