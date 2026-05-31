@@ -16,7 +16,7 @@ class AnalyzeResponse(BaseModel):
 
 
 class InsightCreateRequest(BaseModel):
-    category_id: Optional[int] = None
+    category_name: Optional[str] = None
     ai_source: str
     question_original: str
     answer_original: str

@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from app.database import get_db
 from app.models.user import User
+from app.routers.categories import Category
 from passlib.context import CryptContext
 from jose import jwt
 from datetime import datetime, timedelta
@@ -10,6 +11,8 @@ router = APIRouter(prefix="/api/auth", tags=["auth"])
 
 SECRET_KEY = "mysecretkey"
 ALGORITHM = "HS256"
+
+DEFAULT_CATEGORIES = ["커리어/진로", "개발", "학습/공부", "감정/고민", "창작", "일상", "기타"]
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
@@ -26,6 +29,9 @@ def register(email: str, password: str, name: str = None, db: Session = Depends(
     hashed_password = pwd_context.hash(password)
     user = User(email=email, password=hashed_password, username=name)
     db.add(user)
+    db.flush()
+    for category_name in DEFAULT_CATEGORIES:
+        db.add(Category(name=category_name, user_email=email))
     db.commit()
     return {"message": "회원가입 성공"}
 

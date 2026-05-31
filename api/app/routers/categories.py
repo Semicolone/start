@@ -46,7 +46,12 @@ def delete_category(category_id: int, db: Session = Depends(get_db), current_use
 
 @router.get("/{category_id}/insights")
 def get_category_insights(category_id: int, db: Session = Depends(get_db), current_user: dict = Depends(get_current_user)):
+    from app.models.insight import Insight
     category = db.query(Category).filter(Category.id == category_id, Category.user_email == current_user["user_email"]).first()
     if not category:
         raise HTTPException(status_code=404, detail="카테고리를 찾을 수 없습니다")
-    return {"category_id": category_id, "insights": []}
+    insights = db.query(Insight).filter(
+        Insight.category_id == category_id,
+        Insight.user_email == current_user["user_email"]
+    ).all()
+    return {"category_id": category_id, "insights": insights}
