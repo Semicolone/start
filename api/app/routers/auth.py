@@ -19,12 +19,12 @@ def create_access_token(user_email: str):
     return jwt.encode(payload, SECRET_KEY, algorithm=ALGORITHM)
 
 @router.post("/register")
-def register(email: str, password: str, db: Session = Depends(get_db)):
+def register(email: str, password: str, name: str = None, db: Session = Depends(get_db)):
     existing_user = db.query(User).filter(User.email == email).first()
     if existing_user:
         raise HTTPException(status_code=400, detail="이미 존재하는 이메일입니다")
     hashed_password = pwd_context.hash(password)
-    user = User(email=email, password=hashed_password)
+    user = User(email=email, password=hashed_password, username=name)
     db.add(user)
     db.commit()
     return {"message": "회원가입 성공"}
