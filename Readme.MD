@@ -59,7 +59,7 @@ FLOW는 AI 대화를 단순히 저장하는 것에서 나아가, 자동으로 �
 
 ```
 사용자 Q/A 입력
-  → POST /ai/analyze
+  → POST /api/insights/analyze
   → Groq Cloud API (Llama 3.3)
   → 질문 요약 / 답변 요약 / 키워드 추출 (JSON)
   → PostgreSQL 저장
@@ -102,7 +102,7 @@ cd start
 
 ```bash
 cp .env.example .env
-# .env 파일에서 SECRET_KEY, GROQ_API_KEY 등 실제 값으로 수정
+# .env 파일에서 SECRET_KEY 등 실제 값으로 수정
 ```
 
 ### 3. Docker로 실행 (백엔드 + DB)
