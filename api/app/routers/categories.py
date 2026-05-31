@@ -23,8 +23,13 @@ def create_category(name: str, db: Session = Depends(get_db), current_user: dict
 
 @router.get("")
 def get_categories(db: Session = Depends(get_db), current_user: dict = Depends(get_current_user)):
+    from app.models.insight import Insight
     categories = db.query(Category).filter(Category.user_email == current_user["user_email"]).all()
-    return categories
+    result = []
+    for category in categories:
+        count = db.query(Insight).filter(Insight.category_id == category.id).count()
+        result.append({"id": category.id, "name": category.name, "count": count})
+    return result
 
 @router.put("/{category_id}")
 def update_category(category_id: int, name: str, db: Session = Depends(get_db), current_user: dict = Depends(get_current_user)):
