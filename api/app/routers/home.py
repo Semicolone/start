@@ -8,7 +8,7 @@ from app.models.insight import Insight
 from app.models.user import User
 from app.routers.categories import Category
 from app.schemas.home import HomeResponse, CategoryStat, AiToolStat
-from app.schemas.insight import InsightListResponse
+from app.schemas.insight import InsightListResponse, InsightResponse
 
 router = APIRouter(prefix="/api/home", tags=["home"])
 
@@ -23,9 +23,20 @@ def get_home(db: Session = Depends(get_db), current_user=Depends(get_current_use
 
     total = db.query(Insight).filter(Insight.user_email == user_email).count()
 
-    recent = db.query(Insight).filter(
+    recent_raw = db.query(Insight).filter(
         Insight.user_email == user_email
     ).order_by(Insight.created_at.desc()).limit(3).all()
+
+    recent = []
+    for insight in recent_raw:
+        category_name = None
+        if insight.category_id:
+            category = db.query(Category).filter(Category.id == insight.category_id).first()
+            if category:
+                category_name = category.name
+        insight_data = InsightResponse.model_validate(insight)
+        insight_data.category_name = category_name
+        recent.append(insight_data)
 
     active_days = db.query(
         func.count(func.distinct(func.date(Insight.created_at)))

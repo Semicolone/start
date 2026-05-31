@@ -36,8 +36,11 @@ def create_insight(
             Category.name == request.category_name,
             Category.user_email == current_user["user_email"]
         ).first()
-        if category:
-            category_id = category.id
+        if not category:
+            category = Category(name=request.category_name, user_email=current_user["user_email"])
+            db.add(category)
+            db.flush()
+        category_id = category.id
 
     insight = Insight(
         user_email=current_user["user_email"],
