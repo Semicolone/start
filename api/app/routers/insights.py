@@ -3,6 +3,7 @@ from sqlalchemy.orm import Session
 from app.database import get_db
 from app.dependencies import get_current_user
 from app.models.insight import Insight
+from app.routers.categories import Category
 from app.schemas.insight import (
     AnalyzeRequest, AnalyzeResponse,
     InsightCreateRequest, InsightResponse
@@ -29,9 +30,18 @@ def create_insight(
     db: Session = Depends(get_db),
     current_user=Depends(get_current_user)
 ):
+    category_id = None
+    if request.category_name:
+        category = db.query(Category).filter(
+            Category.name == request.category_name,
+            Category.user_email == current_user["user_email"]
+        ).first()
+        if category:
+            category_id = category.id
+
     insight = Insight(
         user_email=current_user["user_email"],
-        category_id=request.category_id,
+        category_id=category_id,
         ai_source=request.ai_source,
         question_original=request.question_original,
         answer_original=request.answer_original,
