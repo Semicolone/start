@@ -30,6 +30,7 @@ class InsightResponse(BaseModel):
     id: int
     user_email: str
     category_id: Optional[int]
+    category_name: Optional[str] = None
     ai_source: str
     question_original: str
     answer_original: str
