@@ -1,15 +1,150 @@
-## Team Project Description
+# FLOW
 
-| 항목 | 내용 |
-|---|---|
-| 팀명 | Semicolone; |
-| 서비스명 | FLOW |
-| 프로젝트명 | AI 질문을 ‘기억되는 인사이트’로 바꿔주는 개인 지식 관리 플랫폼 |
-| 프로젝트 소개 | AI 기반 질문 기록 및 인사이트 내재화 플랫폼을 만들고자 한다.<br><br>최근 많은 사람들이 ChatGPT와 같은 생성형 AI를 통해 다양한 질문을 하고 정보를 얻고 있지만, 대부분의 대화 내용은 일회성으로 소비되고 이후에는 다시 활용되지 않는 경우가 많다.<br><br>본 서비스는 사용자가 AI에게 질문했던 내용과 답변을 기록하고, 이를 AI가 자동으로 정리하고 연결하며, 시간이 지나 다시 노출하여 장기 기억으로 내재화하도록 돕는 개인 지식 관리 시스템이다.<br><br>단순히 AI 대화를 저장하는 것이 아니라, 사용자가 얻은 인사이트를 정리하고 필요할 때 다시 활용할 수 있도록 돕는 것을 목표로 한다. |
-| 해결하려는 문제 | 최근 생성형 AI 사용이 증가하면서 사용자들은 다양한 질문을 통해 많은 정보를 얻고 있다.<br><br>그러나 대부분의 AI 대화는 일회성으로 끝나고 시간이 지나면 어떤 질문을 했는지, 어떤 답변을 받았는지 기억하기 어렵다.<br><br>또한 AI 대화 기록은 길고 복잡한 경우가 많아 필요한 정보를 다시 찾기 어렵고, 중요한 인사이트가 묻히는 문제가 발생한다.<br><br>이로 인해 사용자는 많은 질문을 통해 정보를 얻지만, 실제로 자신의 지식으로 축적되거나 활용되는 경우는 제한적이라는 문제가 발생한다. |
-| 주요 기능 | - 사용자는 ChatGPT, Gemini 등 외부 AI 사이트에서 얻은 질문과 답변을 서비스에 복사해 붙여넣는다.<br>- 시스템은 질문과 답변을 분석하여 질문 요약, 답변 요약, 핵심 키워드를 자동으로 생성한다.<br>- 생성된 키워드를 기반으로 인사이트를 구조화하고 저장한다.<br>- 사용자는 저장된 인사이트를 다시 확인하거나 검색할 수 있다.<br>- 시간이 지나면 3일 전 인사이트를 다시 보여주어 사용자가 내용을 기억하도록 돕는다.<br>- 향후에는 관련 인사이트 추천과 팀 단위 공유 기능으로 확장한다. |
-| 기술 스택 | **프론트엔드**<br>- React<br>- Vite<br>- 컴포넌트 기반 UI 구현<br>- 질문/답변 입력, 요약 결과 렌더링, 키워드 칩 UI 구성<br>- Home, Login, Signup, My Page 등 주요 화면 라우팅<br><br>**백엔드**<br>- Node.js<br>- AI 분석 API 및 데이터 저장 API 구성<br>- 비동기 요청 처리 및 데이터 파이프라인 구축<br><br>**데이터베이스**<br>- PostgreSQL<br>- 사용자 정보, 인사이트, 키워드, 분석 로그 저장<br>- 향후 검색 및 추천 기능 확장을 고려한 데이터 관리<br><br>**AI 및 데이터 처리**<br>- Groq Cloud API<br>- Llama 3.3<br>- 질문 요약, 답변 요약, 키워드 추출<br>- JSON 기반 구조화 응답 생성<br><br>**향후 확장**<br>- Vector Embedding<br>- 인사이트 간 의미적 유사도 분석<br>- 관련 인사이트 추천 및 팀 단위 중복 탐색 방지 |
-| 개발 환경 | - **OS:** Windows 11 / macOS<br>- **IDE:** Visual Studio Code<br>- **Version Control:** Git, GitHub<br>- **Deploy:** Vercel 예정 |
-| 팀원 역할 | - **이채원:** 프론트엔드, 화면 구현, 사용자 플로우 및 데모 UI 구성<br>- **윤현진:** 백엔드, AI API 연동, 데이터 처리 파이프라인 구현<br>- **신지원:** 백엔드, DB 연동, 문서 정리 및 프로젝트 관리 지원 |
-| 기대 효과 | 본 서비스를 통해 사용자는 AI와의 대화에서 얻은 정보를 체계적으로 관리할 수 있다. 저장된 인사이트는 시간이 지나 다시 노출되기 때문에 기억에 오래 남게 되며, 학습이나 프로젝트 과정에서 다시 활용될 가능성이 높아진다.<br><br>또한 관련 인사이트가 자동으로 연결되면, 사용자는 자신의 질문과 생각이 구조적으로 확장되는 경험을 할 수 있다. 결과적으로 AI 사용이 단순한 질문과 답변에서 끝나는 것이 아니라, 개인의 지식 축적과 사고 확장으로 이어지는 효과를 기대할 수 있다. |
-| GitHub Repo | [https://github.com/Semicolone/start](https://github.com/Semicolone/start) |
+> **AI 질문을 기억되는 인사이트로**
+> 
+> ChatGPT, Gemini 등 생성형 AI와의 대화를 저장하고, AI가 자동으로 요약·키워드를 추출하여 나만의 지식 노트로 만들어주는 개인 지식 관리 플랫폼
+
+![React](https://img.shields.io/badge/React-61DAFB?style=flat-square&logo=react&logoColor=black)
+![Vite](https://img.shields.io/badge/Vite-646CFF?style=flat-square&logo=vite&logoColor=white)
+![FastAPI](https://img.shields.io/badge/FastAPI-009688?style=flat-square&logo=fastapi&logoColor=white)
+![PostgreSQL](https://img.shields.io/badge/PostgreSQL-4169E1?style=flat-square&logo=postgresql&logoColor=white)
+![Docker](https://img.shields.io/badge/Docker-2496ED?style=flat-square&logo=docker&logoColor=white)
+
+---
+
+## 팀 소개
+
+**팀명:** Semicolone;
+
+| 이름 | 역할 |
+|------|------|
+| 윤현진 | Backend · 프로젝트 초기 세팅 · CI/CD |
+| 신지원 | PM · Backend |
+| 이채원 | Frontend · 백엔드 연동 |
+
+---
+
+## 서비스 소개
+
+많은 사람들이 ChatGPT와 같은 생성형 AI를 통해 유용한 정보를 얻지만, 대화 내용은 대부분 일회성으로 소비되고 이후 다시 활용되기 어렵다.
+
+FLOW는 AI 대화를 단순히 저장하는 것에서 나아가, 자동으로 요약·구조화하고 시간이 지나 다시 상기시켜 장기 기억으로 내재화하도록 돕는 서비스다.
+
+---
+
+## 주요 기능
+
+- **AI 자동 분석** — Q/A를 붙여넣으면 질문 요약, 답변 요약, 핵심 키워드를 자동 생성
+- **카테고리 관리** — 인사이트를 카테고리별로 분류하고 조회
+- **3일 리마인드** — 저장한 지 3일이 지난 인사이트를 홈에 다시 노출하여 기억 내재화
+- **마이페이지** — 계정 정보 및 총 인사이트 수 통계 확인
+- **인사이트 검색·조회** — 저장된 인사이트를 언제든 다시 탐색
+
+---
+
+## 기술 스택
+
+| 영역 | 기술 |
+|------|------|
+| Frontend | React, Vite |
+| Backend | FastAPI (Python 3.11) |
+| Database | PostgreSQL 15 |
+| AI | Groq Cloud API (Llama 3.3) |
+| 인프라 | Docker, docker-compose |
+| CI/CD | GitHub Actions → Oracle Cloud |
+
+---
+
+## 시스템 아키텍처
+
+```
+사용자 Q/A 입력
+  → POST /api/insights/analyze
+  → Groq Cloud API (Llama 3.3)
+  → 질문 요약 / 답변 요약 / 키워드 추출 (JSON)
+  → PostgreSQL 저장
+  → 프론트 화면에 렌더링
+```
+
+---
+
+## 디렉토리 구조
+
+```
+start/
+├── api/                  # FastAPI 백엔드
+│   ├── app/
+│   │   ├── main.py
+│   │   ├── database.py
+│   │   ├── models/       # SQLAlchemy 모델
+│   │   ├── routers/      # auth, insights, categories, home, my
+│   │   ├── schemas/      # Pydantic 스키마
+│   │   └── services/     # 비즈니스 로직
+│   ├── Dockerfile
+│   └── requirements.txt
+├── frontend/             # React + Vite 프론트엔드
+├── docker-compose.yml
+└── .env.example
+```
+
+---
+
+## 로컬 개발 환경 설정
+
+### 1. 저장소 클론
+
+```bash
+git clone https://github.com/Semicolone/start.git
+cd start
+```
+
+### 2. 환경 변수 설정
+
+```bash
+cp .env.example .env
+# .env 파일에서 SECRET_KEY 등 실제 값으로 수정
+```
+
+### 3. Docker로 실행 (백엔드 + DB)
+
+```bash
+docker-compose up -d
+```
+
+- API 서버: http://localhost:8000
+- API 문서 (Swagger): http://localhost:8000/docs
+
+### 4. 프론트엔드 실행
+
+```bash
+cd frontend
+npm install
+npm run dev
+```
+
+---
+
+## CI/CD
+
+`dev` 브랜치에 push 시 GitHub Actions가 자동으로 실행된다.
+
+1. **Test** — pytest 실행
+2. **Deploy** — SSH를 통해 Oracle Cloud 서버에 자동 배포 (`docker-compose up --build`)
+
+---
+
+## 향후 확장 계획
+
+- **성향 분석** — 누적된 인사이트 데이터를 기반으로 사용자의 관심사와 사고 패턴을 분석하여 시각화
+- **월간 회고** — 한 달간의 질문 패턴과 주요 인사이트를 자동으로 요약하여 성장 흐름 확인
+- **캘린더 기능** — 날짜별 인사이트 활동을 캘린더 형태로 시각화하여 학습 이력 추적
+- **AI 카테고리 자동 추천** — AI가 인사이트 내용을 분석해 카테고리를 자동으로 분류
+- **브라우저 익스텐션** — 외부 AI 도구 사용 중 원클릭으로 인사이트 저장
+
+---
+
+## 관련 문서
+
+- [기여 가이드](CONTRIBUTING.md)
+- [팀 그라운드 룰](Team_Ground_Rule.md)
+- [GitHub Repository](https://github.com/Semicolone/start)
