@@ -43,5 +43,10 @@ app-example
 /android
 api/.env
 api/app.db
-api/.env
-api/app.db
+.env
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+venv/

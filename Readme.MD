@@ -4,8 +4,8 @@
 > 
 > ChatGPT, Gemini 등 생성형 AI와의 대화를 저장하고, AI가 자동으로 요약·키워드를 추출하여 나만의 지식 노트로 만들어주는 개인 지식 관리 플랫폼
 
-![React](https://img.shields.io/badge/React-61DAFB?style=flat-square&logo=react&logoColor=black)
-![Vite](https://img.shields.io/badge/Vite-646CFF?style=flat-square&logo=vite&logoColor=white)
+![React Native](https://img.shields.io/badge/React_Native-61DAFB?style=flat-square&logo=react&logoColor=black)
+![Expo](https://img.shields.io/badge/Expo-000020?style=flat-square&logo=expo&logoColor=white)
 ![FastAPI](https://img.shields.io/badge/FastAPI-009688?style=flat-square&logo=fastapi&logoColor=white)
 ![PostgreSQL](https://img.shields.io/badge/PostgreSQL-4169E1?style=flat-square&logo=postgresql&logoColor=white)
 ![Docker](https://img.shields.io/badge/Docker-2496ED?style=flat-square&logo=docker&logoColor=white)
@@ -46,7 +46,7 @@ FLOW는 AI 대화를 단순히 저장하는 것에서 나아가, 자동으로 �
 
 | 영역 | 기술 |
 |------|------|
-| Frontend | React, Vite |
+| Frontend | React Native (Expo) |
 | Backend | FastAPI (Python 3.11) |
 | Database | PostgreSQL 15 |
 | AI | Groq Cloud API (Llama 3.3) |
@@ -82,7 +82,7 @@ start/
 │   │   └── services/     # 비즈니스 로직
 │   ├── Dockerfile
 │   └── requirements.txt
-├── frontend/             # React + Vite 프론트엔드
+├── app/                  # React Native 프론트엔드 (Expo Router)
 ├── docker-compose.yml
 └── .env.example
 ```
@@ -117,9 +117,8 @@ docker-compose up -d
 ### 4. 프론트엔드 실행
 
 ```bash
-cd frontend
 npm install
-npm run dev
+npx expo start
 ```
 
 ---
