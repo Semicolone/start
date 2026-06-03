@@ -123,6 +123,19 @@ npx expo start
 
 ---
 
+## Demo
+
+- 데모 영상: [YouTube](https://youtube.com/shorts/cdMv8FisXCo?si=f0-eSPQnBn4kGdGK)
+
+### Demo Scenario
+1. 신규 사용자가 회원가입 후 로그인합니다.
+2. 질문/답변을 입력하고 AI 분석을 실행합니다.
+3. 질문 요약, 답변 요약, 핵심 키워드를 확인한 뒤 저장합니다.
+4. 홈, 카테고리, 최근 질문 목록에 저장 결과가 반영됩니다.
+5. 헤비유저 계정으로 로그인해 월간 회고를 확인합니다.
+
+---
+
 ## CI/CD
 
 `dev` 브랜치에 push 시 GitHub Actions가 자동으로 실행된다.
