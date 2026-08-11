@@ -101,3 +101,38 @@ def get_recent_insights(db: Session = Depends(get_db), current_user=Depends(get_
     ).order_by(Insight.created_at.desc()).limit(3).all()
 
     return InsightListResponse(insights=insights, total=len(insights))
+
+
+MAX_INSIGHTS_PER_DAY = 4
+
+
+@router.get("/calendar")
+def get_calendar(year: int, month: int, db: Session = Depends(get_db), current_user=Depends(get_current_user)):
+    user_email = current_user["user_email"]
+
+    insights = db.query(Insight).filter(
+        Insight.user_email == user_email,
+        extract("year", Insight.created_at) == year,
+        extract("month", Insight.created_at) == month
+    ).order_by(Insight.created_at.asc()).all()
+
+    categories = {
+        c.id: c.name
+        for c in db.query(Category).filter(Category.user_email == user_email).all()
+    }
+
+    days = {}
+    for insight in insights:
+        day = insight.created_at.day
+        day_insights = days.setdefault(day, [])
+        if len(day_insights) >= MAX_INSIGHTS_PER_DAY:
+            continue
+        day_insights.append({
+            "id": insight.id,
+            "question_summary": insight.question_summary or insight.question_original[:50],
+            "answer_summary": insight.answer_summary or insight.answer_original[:50],
+            "category_name": categories.get(insight.category_id, "기타"),
+            "ai_source": insight.ai_source,
+        })
+
+    return {"year": year, "month": month, "days": days}
