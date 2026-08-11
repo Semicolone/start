@@ -1,5 +1,5 @@
 from pydantic import BaseModel
-from typing import List
+from typing import Dict, List
 from app.schemas.insight import InsightResponse
 
 
@@ -23,3 +23,4 @@ class HomeResponse(BaseModel):
     ai_tool_count: int
     category_distribution: List[CategoryStat]
     ai_tool_distribution: List[AiToolStat]
+    heatmap: Dict[str, int]
