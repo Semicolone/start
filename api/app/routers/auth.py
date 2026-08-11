@@ -1,3 +1,5 @@
+import os
+
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from app.database import get_db
@@ -9,7 +11,7 @@ from datetime import datetime, timedelta
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 
-SECRET_KEY = "mysecretkey"
+SECRET_KEY = os.getenv("SECRET_KEY")
 ALGORITHM = "HS256"
 
 DEFAULT_CATEGORIES = ["커리어/진로", "개발", "학습/공부", "감정/고민", "창작", "일상", "기타"]
