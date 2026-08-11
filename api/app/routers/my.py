@@ -1,3 +1,6 @@
+from collections import Counter
+from datetime import datetime, timedelta
+
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from sqlalchemy import extract, func
@@ -11,6 +14,30 @@ from passlib.context import CryptContext
 router = APIRouter(prefix="/api/my", tags=["my"])
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+
+PERIOD_DAYS = {"1m": 30, "3m": 90}
+
+
+def aggregate_keywords_by_category(insights: list, categories: dict) -> list:
+    counters = {}
+    for insight in insights:
+        if not insight.keywords:
+            continue
+        category_name = categories.get(insight.category_id, "기타")
+        counter = counters.setdefault(category_name, Counter())
+        for keyword in insight.keywords:
+            counter[keyword] += 1
+
+    return [
+        {
+            "name": category_name,
+            "keywords": [
+                {"keyword": keyword, "count": count}
+                for keyword, count in counter.most_common()
+            ],
+        }
+        for category_name, counter in counters.items()
+    ]
 
 @router.get("/profile")
 def get_profile(db: Session = Depends(get_db), current_user: dict = Depends(get_current_user)):
@@ -44,6 +71,30 @@ def delete_account(db: Session = Depends(get_db), current_user: dict = Depends(g
 @router.get("/analysis")
 def get_analysis(current_user: dict = Depends(get_current_user)):
     return {"user_email": current_user["user_email"], "analysis": "준비 중입니다"}
+
+@router.get("/keyword_report")
+def get_keyword_report(period: str = "all", db: Session = Depends(get_db), current_user: dict = Depends(get_current_user)):
+    if period not in ("all", "1m", "3m"):
+        raise HTTPException(status_code=400, detail="period는 all, 1m, 3m 중 하나여야 합니다")
+
+    user_email = current_user["user_email"]
+
+    query = db.query(Insight).filter(Insight.user_email == user_email)
+    if period in PERIOD_DAYS:
+        since = datetime.utcnow() - timedelta(days=PERIOD_DAYS[period])
+        query = query.filter(Insight.created_at >= since)
+
+    insights = query.all()
+
+    categories = {
+        c.id: c.name
+        for c in db.query(Category).filter(Category.user_email == user_email).all()
+    }
+
+    return {
+        "period": period,
+        "categories": aggregate_keywords_by_category(insights, categories),
+    }
 
 @router.get("/monthly_review/{year}/{month}")
 def get_monthly_review(year: int, month: int, db: Session = Depends(get_db), current_user: dict = Depends(get_current_user)):
