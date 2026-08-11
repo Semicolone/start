@@ -1,9 +1,9 @@
 import os
 import json
-from groq import Groq
+from groq import Groq, APITimeoutError, RateLimitError, APIConnectionError
 from fastapi import HTTPException
 
-client = Groq(api_key=os.getenv("GROQ_API_KEY"))
+client = Groq(api_key=os.getenv("GROQ_API_KEY"), timeout=15.0)
 
 
 def analyze_with_groq(question: str, answer: str) -> dict:
@@ -78,6 +78,12 @@ def generate_monthly_review(year: int, month: int, insights: list) -> dict:
         result = json.loads(content)
         return result
     except json.JSONDecodeError:
-        raise HTTPException(status_code=500, detail="AI 회고 생성 파싱에 실패했습니다")
+        raise HTTPException(status_code=500, detail="AI 회고 생성 결과를 처리하지 못했어요. 잠시 후 다시 시도해주세요.")
+    except APITimeoutError:
+        raise HTTPException(status_code=504, detail="AI 응답이 지연되고 있어요. 잠시 후 다시 시도해주세요.")
+    except RateLimitError:
+        raise HTTPException(status_code=429, detail="지금 요청이 많아 회고 생성이 지연되고 있어요. 잠시 후 다시 시도해주세요.")
+    except APIConnectionError:
+        raise HTTPException(status_code=503, detail="AI 서비스에 연결하지 못했어요. 잠시 후 다시 시도해주세요.")
     except Exception:
-        raise HTTPException(status_code=500, detail="AI 회고 생성에 실패했습니다")
+        raise HTTPException(status_code=500, detail="AI 회고 생성에 실패했어요. 잠시 후 다시 시도해주세요.")
