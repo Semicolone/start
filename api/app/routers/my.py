@@ -160,12 +160,17 @@ def get_keyword_detail(keyword: str, sort: str = "recent", db: Session = Depends
         "insights": insight_list,
     }
 
+MIN_INSIGHTS_FOR_REVIEW = 3
+
+
 @router.get("/monthly_review/{year}/{month}")
 def get_monthly_review(year: int, month: int, db: Session = Depends(get_db), current_user: dict = Depends(get_current_user)):
     from app.services.ai import generate_monthly_review
 
+    user_email = current_user["user_email"]
+
     insights = db.query(Insight).filter(
-        Insight.user_email == current_user["user_email"],
+        Insight.user_email == user_email,
         extract("year", Insight.created_at) == year,
         extract("month", Insight.created_at) == month
     ).all()
@@ -178,16 +183,69 @@ def get_monthly_review(year: int, month: int, db: Session = Depends(get_db), cur
         day_counts[d] = day_counts.get(d, 0) + 1
     max_questions = max(day_counts.values()) if day_counts else 0
 
+    categories = {
+        c.id: c.name
+        for c in db.query(Category).filter(Category.user_email == user_email).all()
+    }
+
+    if total_questions < MIN_INSIGHTS_FOR_REVIEW:
+        return {
+            "year": year,
+            "month": month,
+            "total_questions": total_questions,
+            "active_days": active_days,
+            "max_questions": max_questions,
+            "title": f"{year}년 {month}월 회고",
+            "summary": f"이번 달은 아직 인사이트가 {total_questions}개예요. {MIN_INSIGHTS_FOR_REVIEW}개 이상 쌓이면 회고를 보여드릴게요.",
+            "highlight": None,
+            "timeline": [],
+            "category_changes": [],
+            "keyword_top5": [],
+        }
+
     insights_data = [
         {
             "date": i.created_at.strftime("%m/%d"),
             "question_summary": i.question_summary or i.question_original[:50],
-            "category": str(i.category_id) if i.category_id else "기타"
+            "category": categories.get(i.category_id, "기타")
         }
         for i in insights
     ]
 
     ai_result = generate_monthly_review(year, month, insights_data)
+
+    # 전월 대비 카테고리별 변화
+    prev_year, prev_month = (year - 1, 12) if month == 1 else (year, month - 1)
+    prev_insights = db.query(Insight).filter(
+        Insight.user_email == user_email,
+        extract("year", Insight.created_at) == prev_year,
+        extract("month", Insight.created_at) == prev_month
+    ).all()
+
+    this_month_counts = Counter(categories.get(i.category_id, "기타") for i in insights)
+    prev_month_counts = Counter(categories.get(i.category_id, "기타") for i in prev_insights)
+
+    category_changes = []
+    all_category_names = set(this_month_counts) | set(prev_month_counts)
+    for category_name in all_category_names:
+        count = this_month_counts.get(category_name, 0)
+        prev_count = prev_month_counts.get(category_name, 0)
+        if prev_count == 0:
+            change = "신규"
+        else:
+            percent = round((count - prev_count) / prev_count * 100)
+            change = f"{'+' if percent >= 0 else ''}{percent}%"
+        category_changes.append({
+            "name": category_name,
+            "count": count,
+            "previous_count": prev_count,
+            "change": change,
+        })
+
+    # 이달의 키워드 Top5 (카테고리 구분 없이 전체 합산)
+    category_keywords = aggregate_keywords_by_category(insights, categories)
+    all_keywords = [kw for cat in category_keywords for kw in cat["keywords"]]
+    keyword_top5 = sorted(all_keywords, key=lambda k: k["count"], reverse=True)[:5]
 
     return {
         "year": year,
@@ -198,7 +256,9 @@ def get_monthly_review(year: int, month: int, db: Session = Depends(get_db), cur
         "title": ai_result.get("title"),
         "summary": ai_result.get("summary"),
         "highlight": ai_result.get("highlight"),
-        "timeline": ai_result.get("timeline", [])
+        "timeline": ai_result.get("timeline", []),
+        "category_changes": category_changes,
+        "keyword_top5": keyword_top5,
     }
 
 @router.put("/password")
