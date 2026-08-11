@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 from sqlalchemy import func, extract
-from datetime import datetime
+from datetime import datetime, timedelta
 from app.database import get_db
 from app.dependencies import get_current_user
 from app.models.insight import Insight
@@ -11,6 +11,8 @@ from app.schemas.home import HomeResponse, CategoryStat, AiToolStat
 from app.schemas.insight import InsightListResponse, InsightResponse
 
 router = APIRouter(prefix="/api/home", tags=["home"])
+
+HEATMAP_DAYS = 28
 
 
 @router.get("", response_model=HomeResponse)
@@ -82,6 +84,23 @@ def get_home(db: Session = Depends(get_db), current_user=Depends(get_current_use
         for row in ai_rows
     ]
 
+    heatmap_start = now.date() - timedelta(days=HEATMAP_DAYS - 1)
+
+    heatmap_rows = db.query(
+        func.date(Insight.created_at).label('day'),
+        func.count(Insight.id).label('count')
+    ).filter(
+        Insight.user_email == user_email,
+        func.date(Insight.created_at) >= heatmap_start
+    ).group_by('day').all()
+
+    heatmap_counts = {str(row.day): row.count for row in heatmap_rows}
+
+    heatmap = {}
+    for offset in range(HEATMAP_DAYS):
+        day_str = (heatmap_start + timedelta(days=offset)).isoformat()
+        heatmap[day_str] = heatmap_counts.get(day_str, 0)
+
     return HomeResponse(
         greeting=f"{display_name}님, 오늘도 인사이트를 쌓아보세요!",
         total_insights=total,
@@ -90,6 +109,7 @@ def get_home(db: Session = Depends(get_db), current_user=Depends(get_current_use
         ai_tool_count=ai_tool_count,
         category_distribution=category_distribution,
         ai_tool_distribution=ai_tool_distribution,
+        heatmap=heatmap,
     )
 
 
