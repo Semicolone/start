@@ -4,6 +4,7 @@ from sqlalchemy import extract, func
 from app.database import get_db
 from app.models.user import User
 from app.models.insight import Insight
+from app.routers.categories import Category
 from app.dependencies import get_current_user
 from passlib.context import CryptContext
 
@@ -32,6 +33,10 @@ def delete_account(db: Session = Depends(get_db), current_user: dict = Depends(g
     user = db.query(User).filter(User.email == current_user["user_email"]).first()
     if not user:
         raise HTTPException(status_code=404, detail="유저를 찾을 수 없습니다")
+
+    # Insight가 Category를 참조하므로, Category보다 먼저 지워야 FK 제약을 위반하지 않음
+    db.query(Insight).filter(Insight.user_email == user.email).delete()
+    db.query(Category).filter(Category.user_email == user.email).delete()
     db.delete(user)
     db.commit()
     return {"message": "회원 탈퇴 성공"}
