@@ -27,7 +27,7 @@ jobs:
     - name: Run tests
       run: |
         cd api
-        pytest tests/ -v || echo "No tests found yet"
+        pytest tests/ -v
 
   deploy:
     needs: test
@@ -44,6 +44,5 @@ jobs:
         script: |
           cd ~/start
           git pull origin dev
-          docker-compose down
           docker-compose up --build -d
           docker-compose logs --tail=50
