@@ -44,5 +44,6 @@ jobs:
         script: |
           cd ~/start
           git pull origin dev
-          docker-compose up --build -d
-          docker-compose logs --tail=50
+          docker rm -f flow-api || true
+          docker-compose up --build -d api
+          docker-compose logs --tail=50 api
