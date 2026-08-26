@@ -5,6 +5,8 @@ from fastapi import HTTPException
 
 client = Groq(api_key=os.getenv("GROQ_API_KEY"), timeout=15.0)
 
+MODEL = "openai/gpt-oss-120b"
+
 
 def analyze_with_groq(question: str, answer: str) -> dict:
     prompt = f"""다음 질문과 답변을 분석해서 아래 JSON 형식으로만 반환해주세요. 다른 텍스트는 포함하지 마세요.
@@ -21,7 +23,7 @@ def analyze_with_groq(question: str, answer: str) -> dict:
 
     try:
         response = client.chat.completions.create(
-            model="llama-3.3-70b-versatile",
+            model=MODEL,
             messages=[{"role": "user", "content": prompt}],
             temperature=0.3,
         )
@@ -70,7 +72,7 @@ def generate_monthly_review(year: int, month: int, insights: list) -> dict:
 
     try:
         response = client.chat.completions.create(
-            model="llama-3.3-70b-versatile",
+            model=MODEL,
             messages=[{"role": "user", "content": prompt}],
             temperature=0.5,
         )
