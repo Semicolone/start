@@ -1,0 +1,16 @@
+name: Send 3-day Reminders
+
+on:
+  schedule:
+    - cron: '0 0 * * *'
+  workflow_dispatch:
+
+jobs:
+  send-reminders:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Call reminder endpoint
+        run: |
+          curl -f -X POST http://168.107.61.72:8000/api/internal/send_reminders \
+            -H "X-Internal-Secret: ${{ secrets.INTERNAL_TASK_SECRET }}"

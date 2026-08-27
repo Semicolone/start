@@ -7,3 +7,4 @@ class User(Base):
     email = Column(String, primary_key=True, index=True)
     password = Column(String, nullable=False)
     username = Column(String, nullable=True)
+    push_token = Column(String, nullable=True)
