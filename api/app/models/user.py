@@ -1,4 +1,4 @@
-from sqlalchemy import Column, String
+from sqlalchemy import Column, String, Boolean
 from app.database import Base
 
 class User(Base):
@@ -8,3 +8,4 @@ class User(Base):
     password = Column(String, nullable=False)
     username = Column(String, nullable=True)
     push_token = Column(String, nullable=True)
+    reminder_enabled = Column(Boolean, nullable=False, default=True)
