@@ -18,3 +18,4 @@ class Insight(Base):
     saved_from = Column(String(20), nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    reminded_at = Column(DateTime, nullable=True)

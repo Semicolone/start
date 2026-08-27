@@ -55,6 +55,15 @@ def update_profile(username: str, db: Session = Depends(get_db), current_user: d
     db.commit()
     return {"email": user.email, "username": user.username}
 
+@router.put("/push_token")
+def update_push_token(push_token: str, db: Session = Depends(get_db), current_user: dict = Depends(get_current_user)):
+    user = db.query(User).filter(User.email == current_user["user_email"]).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="유저를 찾을 수 없습니다")
+    user.push_token = push_token
+    db.commit()
+    return {"message": "푸시 토큰 등록 성공"}
+
 @router.delete("/account")
 def delete_account(db: Session = Depends(get_db), current_user: dict = Depends(get_current_user)):
     user = db.query(User).filter(User.email == current_user["user_email"]).first()

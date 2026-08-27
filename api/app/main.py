@@ -1,9 +1,10 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from app.database import engine, Base
-from app.routers import insights, home, auth, categories, my
+from app.database import engine, Base, run_startup_migrations
+from app.routers import insights, home, auth, categories, my, internal
 
 Base.metadata.create_all(bind=engine)
+run_startup_migrations()
 
 app = FastAPI(title="FLOW API")
 
@@ -20,6 +21,7 @@ app.include_router(home.router)
 app.include_router(auth.router)
 app.include_router(categories.router)
 app.include_router(my.router)
+app.include_router(internal.router)
 
 
 @app.get("/")
