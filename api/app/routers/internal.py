@@ -1,5 +1,5 @@
 import os
-from datetime import date, datetime, timedelta
+from datetime import datetime, timedelta
 
 from fastapi import APIRouter, Depends, Header, HTTPException
 from sqlalchemy.orm import Session
@@ -26,7 +26,7 @@ def verify_internal_secret(x_internal_secret: str = Header(None)):
 
 @router.post("/send_reminders", dependencies=[Depends(verify_internal_secret)])
 def send_reminders(db: Session = Depends(get_db)):
-    target_date = date.today() - timedelta(days=REMINDER_DAYS)
+    target_date = (datetime.utcnow() - timedelta(days=REMINDER_DAYS)).date()
 
     insights = db.query(Insight).filter(
         Insight.reminded_at.is_(None),
@@ -39,7 +39,7 @@ def send_reminders(db: Session = Depends(get_db)):
 
     for insight in insights:
         user = db.query(User).filter(User.email == insight.user_email).first()
-        if not user or not user.push_token:
+        if not user or not user.push_token or not user.reminder_enabled:
             skipped += 1
             continue
 
