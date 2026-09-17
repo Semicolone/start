@@ -13,6 +13,7 @@ import {
   View,
 } from 'react-native';
 import { authApi } from '../../lib/client';
+import { registerPushNotifications } from '../../lib/notifications';
 
 const logoLeaf = require('../../assets/images/logo_leaf.png');
 const bottomImage = require('../../assets/images/bottom.png');
@@ -38,6 +39,15 @@ export default function LoginScreen() {
         password,
       });
 
+      /*
+       * 로그인 성공 후 이 휴대폰의 Expo Push Token을
+       * 백엔드에 등록한다.
+       *
+       * 알림 권한을 거부했거나 푸시 등록에 실패해도
+       * 로그인 자체는 정상적으로 계속 진행된다.
+       */
+      await registerPushNotifications();
+
       router.replace('/home');
     } catch (error: any) {
       setErrorMessage(
@@ -55,23 +65,43 @@ export default function LoginScreen() {
     >
       <View style={styles.outer}>
         <View style={styles.phone}>
-          <Image source={bottomImage} style={styles.bottomImage} resizeMode="cover" />
+          <Image
+            source={bottomImage}
+            style={styles.bottomImage}
+            resizeMode="cover"
+          />
 
           <View style={styles.content}>
             <View style={styles.logoArea}>
               <View style={styles.logoRow}>
-                <Image source={logoLeaf} style={styles.logoLeaf} resizeMode="contain" />
-                <Text style={styles.logoText}>FLOW</Text>
+                <Image
+                  source={logoLeaf}
+                  style={styles.logoLeaf}
+                  resizeMode="contain"
+                />
+
+                <Text style={styles.logoText}>
+                  FLOW
+                </Text>
               </View>
 
-              <Text style={styles.subtitle}>AI 질문 기록으로 나를 발견해요</Text>
+              <Text style={styles.subtitle}>
+                AI 질문 기록으로 나를 발견해요
+              </Text>
             </View>
 
             <View style={styles.form}>
-              <Text style={styles.label}>이메일</Text>
+              <Text style={styles.label}>
+                이메일
+              </Text>
 
               <View style={styles.inputBox}>
-                <Ionicons name="mail-outline" size={16} color="#9CA3AF" />
+                <Ionicons
+                  name="mail-outline"
+                  size={16}
+                  color="#9CA3AF"
+                />
+
                 <TextInput
                   style={styles.input}
                   placeholder="이메일을 입력하세요"
@@ -86,10 +116,17 @@ export default function LoginScreen() {
                 />
               </View>
 
-              <Text style={styles.label}>비밀번호</Text>
+              <Text style={styles.label}>
+                비밀번호
+              </Text>
 
               <View style={styles.inputBox}>
-                <Ionicons name="lock-closed-outline" size={16} color="#9CA3AF" />
+                <Ionicons
+                  name="lock-closed-outline"
+                  size={16}
+                  color="#9CA3AF"
+                />
+
                 <TextInput
                   style={styles.input}
                   placeholder="비밀번호를 입력하세요"
@@ -101,29 +138,62 @@ export default function LoginScreen() {
                   }}
                   secureTextEntry
                 />
-                <Ionicons name="eye-off-outline" size={16} color="#9CA3AF" />
+
+                <Ionicons
+                  name="eye-off-outline"
+                  size={16}
+                  color="#9CA3AF"
+                />
               </View>
 
               {errorMessage ? (
-                <Text style={styles.errorText}>{errorMessage}</Text>
+                <Text style={styles.errorText}>
+                  {errorMessage}
+                </Text>
               ) : null}
 
               <Pressable
-                style={[styles.loginButton, loading && styles.disabledButton]}
+                style={[
+                  styles.loginButton,
+                  loading &&
+                    styles.disabledButton,
+                ]}
                 onPress={handleLogin}
                 disabled={loading}
               >
                 {loading ? (
-                  <ActivityIndicator color="#ffffff" />
+                  <ActivityIndicator
+                    color="#ffffff"
+                  />
                 ) : (
-                  <Text style={styles.loginButtonText}>로그인</Text>
+                  <Text
+                    style={
+                      styles.loginButtonText
+                    }
+                  >
+                    로그인
+                  </Text>
                 )}
               </Pressable>
 
-              <Pressable onPress={() => router.push('/register')}>
-                <Text style={styles.registerText}>
+              <Pressable
+                onPress={() =>
+                  router.push('/register')
+                }
+              >
+                <Text
+                  style={
+                    styles.registerText
+                  }
+                >
                   계정이 없으신가요?{' '}
-                  <Text style={styles.registerStrong}>회원가입</Text>
+                  <Text
+                    style={
+                      styles.registerStrong
+                    }
+                  >
+                    회원가입
+                  </Text>
                 </Text>
               </Pressable>
             </View>
@@ -220,7 +290,10 @@ const styles = StyleSheet.create({
     shadowColor: '#000000',
     shadowOpacity: 0.025,
     shadowRadius: 6,
-    shadowOffset: { width: 0, height: 3 },
+    shadowOffset: {
+      width: 0,
+      height: 3,
+    },
     elevation: 1,
   },
 
@@ -230,7 +303,12 @@ const styles = StyleSheet.create({
     marginLeft: 9,
     fontSize: 13,
     color: '#222222',
-    ...(Platform.OS === 'web' ? ({ outlineStyle: 'none' } as any) : {}),
+
+    ...(Platform.OS === 'web'
+      ? ({
+          outlineStyle: 'none',
+        } as any)
+      : {}),
   },
 
   errorText: {
@@ -252,7 +330,10 @@ const styles = StyleSheet.create({
     shadowColor: '#1F5F3F',
     shadowOpacity: 0.2,
     shadowRadius: 10,
-    shadowOffset: { width: 0, height: 6 },
+    shadowOffset: {
+      width: 0,
+      height: 6,
+    },
     elevation: 5,
   },
 
