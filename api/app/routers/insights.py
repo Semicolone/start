@@ -153,6 +153,7 @@ def review_insight(
     insight.next_review_at = (
         compute_next_review_at(datetime.utcnow(), interval_days) if interval_days is not None else None
     )
+    insight.reminded_at = None
 
     user = db.query(User).filter(User.email == current_user["user_email"]).first()
     today = kst_today()

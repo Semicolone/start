@@ -1,9 +1,8 @@
 import os
-from datetime import datetime, timedelta
+from datetime import datetime
 
 from fastapi import APIRouter, Depends, Header, HTTPException
 from sqlalchemy.orm import Session
-from sqlalchemy import func
 
 from app.database import get_db
 from app.models.insight import Insight
@@ -14,9 +13,8 @@ router = APIRouter(prefix="/api/internal", tags=["internal"])
 
 INTERNAL_TASK_SECRET = os.getenv("INTERNAL_TASK_SECRET")
 
-REMINDER_DAYS = 3
 REMINDER_TITLE = "FLOW"
-REMINDER_BODY = "3일 전 인사이트를 확인해보세요"
+DEFAULT_KEYWORD = "저장한 인사이트"
 
 
 def verify_internal_secret(x_internal_secret: str = Header(None)):
@@ -26,11 +24,12 @@ def verify_internal_secret(x_internal_secret: str = Header(None)):
 
 @router.post("/send_reminders", dependencies=[Depends(verify_internal_secret)])
 def send_reminders(db: Session = Depends(get_db)):
-    target_date = (datetime.utcnow() - timedelta(days=REMINDER_DAYS)).date()
+    now = datetime.utcnow()
 
     insights = db.query(Insight).filter(
+        Insight.next_review_at.isnot(None),
+        Insight.next_review_at <= now,
         Insight.reminded_at.is_(None),
-        func.date(Insight.created_at) == target_date,
     ).all()
 
     sent = 0
@@ -43,11 +42,13 @@ def send_reminders(db: Session = Depends(get_db)):
             skipped += 1
             continue
 
+        keyword = (insight.keywords or [None])[0] or DEFAULT_KEYWORD
+
         try:
             send_push_notification(
                 push_token=user.push_token,
                 title=REMINDER_TITLE,
-                body=REMINDER_BODY,
+                body=f"{keyword}에 대해 기억나시나요?",
                 data={"insight_id": insight.id},
             )
             insight.reminded_at = datetime.utcnow()
@@ -58,7 +59,7 @@ def send_reminders(db: Session = Depends(get_db)):
     db.commit()
 
     return {
-        "target_date": target_date.isoformat(),
+        "checked_at": now.isoformat(),
         "sent": sent,
         "skipped": skipped,
         "failed": failed,
