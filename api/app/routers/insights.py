@@ -8,7 +8,8 @@ from app.models.user import User
 from app.routers.categories import Category
 from app.schemas.insight import (
     AnalyzeRequest, AnalyzeResponse,
-    InsightCreateRequest, InsightResponse,
+    InsightCreateRequest, InsightUpdateRequest, InsightResponse,
+    InsightListResponse,
     ReviewRequest, ReviewResponse
 )
 from app.schemas.common import MessageResponse
@@ -73,6 +74,29 @@ def create_insight(
     return insight
 
 
+@router.get("", response_model=InsightListResponse)
+def list_insights(
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user)
+):
+    insights = db.query(Insight).filter(
+        Insight.user_email == current_user["user_email"]
+    ).order_by(Insight.created_at.desc()).all()
+
+    items = []
+    for insight in insights:
+        category_name = None
+        if insight.category_id:
+            category = db.query(Category).filter(Category.id == insight.category_id).first()
+            if category:
+                category_name = category.name
+        insight_data = InsightResponse.model_validate(insight)
+        insight_data.category_name = category_name
+        items.append(insight_data)
+
+    return InsightListResponse(insights=items, total=len(items))
+
+
 @router.get("/{insight_id}", response_model=InsightResponse)
 def get_insight(
     insight_id: int,
@@ -85,6 +109,29 @@ def get_insight(
     ).first()
     if not insight:
         raise HTTPException(status_code=404, detail="인사이트를 찾을 수 없습니다")
+    return insight
+
+
+@router.patch("/{insight_id}", response_model=InsightResponse)
+def update_insight(
+    insight_id: int,
+    request: InsightUpdateRequest,
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user)
+):
+    insight = db.query(Insight).filter(
+        Insight.id == insight_id,
+        Insight.user_email == current_user["user_email"]
+    ).first()
+    if not insight:
+        raise HTTPException(status_code=404, detail="인사이트를 찾을 수 없습니다")
+
+    update_data = request.model_dump(exclude_unset=True)
+    for field, value in update_data.items():
+        setattr(insight, field, value)
+
+    db.commit()
+    db.refresh(insight)
     return insight
 
 

@@ -48,6 +48,13 @@ class InsightResponse(BaseModel):
     model_config = {"from_attributes": True}
 
 
+class InsightUpdateRequest(BaseModel):
+    question_summary: Optional[str] = None
+    answer_summary: Optional[str] = None
+    bullet_summary: Optional[List[str]] = None
+    keywords: Optional[List[str]] = None
+
+
 class ReviewRequest(BaseModel):
     outcome: Literal["전혀기억안남", "헷갈림", "기억남"]
 
