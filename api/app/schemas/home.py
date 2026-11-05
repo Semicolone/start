@@ -1,5 +1,5 @@
 from pydantic import BaseModel
-from typing import Dict, List
+from typing import List
 from app.schemas.insight import InsightResponse
 
 
@@ -23,4 +23,15 @@ class HomeResponse(BaseModel):
     ai_tool_count: int
     category_distribution: List[CategoryStat]
     ai_tool_distribution: List[AiToolStat]
-    heatmap: Dict[str, int]
+
+
+class ReviewProgress(BaseModel):
+    completed: int
+    total: int
+
+
+class ReviewQueueResponse(BaseModel):
+    state: str
+    items: List[InsightResponse]
+    progress: ReviewProgress
+    current_streak: int
