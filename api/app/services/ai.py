@@ -14,10 +14,13 @@ def analyze_with_groq(question: str, answer: str) -> dict:
 질문: {question}
 답변: {answer}
 
+bullet_summary는 나중에 복습할 때 보는 요약이므로, 답변의 핵심 내용을 담아 개조식 문장들의 배열로 작성해주세요. 문장 개수는 답변 분량에 맞게 2개에서 5개 사이에서 자유롭게 정하세요.
+
 반환 형식:
 {{
     "question_summary": "질문을 1-2문장으로 요약",
-    "answer_summary": "답변을 2-3문장으로 요약",
+    "answer_summary": "답변을 2-4문장으로 요약",
+    "bullet_summary": ["개조식 문장"],
     "keywords": ["키워드1", "키워드2", "키워드3", "키워드4", "키워드5"]
 }}"""
 

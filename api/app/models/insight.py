@@ -19,3 +19,5 @@ class Insight(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     reminded_at = Column(DateTime, nullable=True)
+    bullet_summary = Column(JSON, nullable=True)
+    next_review_at = Column(DateTime, nullable=True)

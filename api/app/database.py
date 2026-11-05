@@ -25,6 +25,11 @@ def run_startup_migrations():
         "ALTER TABLE users ADD COLUMN push_token VARCHAR",
         "ALTER TABLE insights ADD COLUMN reminded_at TIMESTAMP",
         "ALTER TABLE users ADD COLUMN reminder_enabled BOOLEAN NOT NULL DEFAULT true",
+        "ALTER TABLE insights ADD COLUMN bullet_summary JSON",
+        "ALTER TABLE insights ADD COLUMN next_review_at TIMESTAMP",
+        "ALTER TABLE users ADD COLUMN current_streak INTEGER NOT NULL DEFAULT 0",
+        "ALTER TABLE users ADD COLUMN last_review_date DATE",
+        "ALTER TABLE users ADD COLUMN reviewed_today_count INTEGER NOT NULL DEFAULT 0",
     ]
     with engine.connect() as conn:
         for statement in statements:

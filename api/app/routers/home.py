@@ -1,18 +1,17 @@
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 from sqlalchemy import func, extract
-from datetime import datetime, timedelta
+from datetime import datetime
 from app.database import get_db
 from app.dependencies import get_current_user
 from app.models.insight import Insight
 from app.models.user import User
 from app.routers.categories import Category
-from app.schemas.home import HomeResponse, CategoryStat, AiToolStat
+from app.schemas.home import HomeResponse, CategoryStat, AiToolStat, ReviewProgress, ReviewQueueResponse
 from app.schemas.insight import InsightListResponse, InsightResponse
+from app.utils import kst_today
 
 router = APIRouter(prefix="/api/home", tags=["home"])
-
-HEATMAP_DAYS = 28
 
 
 @router.get("", response_model=HomeResponse)
@@ -84,23 +83,6 @@ def get_home(db: Session = Depends(get_db), current_user=Depends(get_current_use
         for row in ai_rows
     ]
 
-    heatmap_start = now.date() - timedelta(days=HEATMAP_DAYS - 1)
-
-    heatmap_rows = db.query(
-        func.date(Insight.created_at).label('day'),
-        func.count(Insight.id).label('count')
-    ).filter(
-        Insight.user_email == user_email,
-        func.date(Insight.created_at) >= heatmap_start
-    ).group_by('day').all()
-
-    heatmap_counts = {str(row.day): row.count for row in heatmap_rows}
-
-    heatmap = {}
-    for offset in range(HEATMAP_DAYS):
-        day_str = (heatmap_start + timedelta(days=offset)).isoformat()
-        heatmap[day_str] = heatmap_counts.get(day_str, 0)
-
     return HomeResponse(
         greeting=f"{display_name}님, 오늘도 인사이트를 쌓아보세요!",
         total_insights=total,
@@ -109,7 +91,49 @@ def get_home(db: Session = Depends(get_db), current_user=Depends(get_current_use
         ai_tool_count=ai_tool_count,
         category_distribution=category_distribution,
         ai_tool_distribution=ai_tool_distribution,
-        heatmap=heatmap,
+    )
+
+
+@router.get("/review_queue", response_model=ReviewQueueResponse)
+def get_review_queue(db: Session = Depends(get_db), current_user=Depends(get_current_user)):
+    user_email = current_user["user_email"]
+    user = db.query(User).filter(User.email == user_email).first()
+    now = datetime.utcnow()
+    today = kst_today(now)
+
+    due_raw = db.query(Insight).filter(
+        Insight.user_email == user_email,
+        Insight.next_review_at.isnot(None),
+        Insight.next_review_at <= now
+    ).order_by(Insight.next_review_at.asc()).all()
+
+    items = []
+    for insight in due_raw:
+        category_name = None
+        if insight.category_id:
+            category = db.query(Category).filter(Category.id == insight.category_id).first()
+            if category:
+                category_name = category.name
+        insight_data = InsightResponse.model_validate(insight)
+        insight_data.category_name = category_name
+        items.append(insight_data)
+
+    remaining = len(items)
+    reviewed_today = user.reviewed_today_count if user.last_review_date == today else 0
+    total_today = remaining + reviewed_today
+
+    if remaining == 0 and reviewed_today == 0:
+        state = "empty"
+    elif remaining == 0:
+        state = "complete"
+    else:
+        state = "in_progress"
+
+    return ReviewQueueResponse(
+        state=state,
+        items=items,
+        progress=ReviewProgress(completed=total_today - remaining, total=total_today),
+        current_streak=user.current_streak,
     )
 
 
