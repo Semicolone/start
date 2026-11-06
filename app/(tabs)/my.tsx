@@ -1,4 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { router, useFocusEffect } from 'expo-router';
 import { useCallback, useState } from 'react';
 import {
@@ -57,6 +58,54 @@ export default function MyScreen() {
     setErrorMessage,
   ] = useState('');
 
+  /* FLOW_REMINDER_CONTROL_V1
+     푸시 발송 여부는 서버 PUT API로 변경한다.
+     서버에 GET 설정 조회 API가 없으므로, 표시 상태는 이 기기/계정별로 캐시한다.
+     첫 접근은 백엔드의 기본값(true)을 따른다.
+  */
+  const [reminderEnabled, setReminderEnabled] = useState(true);
+  const [reminderLoaded, setReminderLoaded] = useState(false);
+  const [reminderSaving, setReminderSaving] = useState(false);
+  const [reminderConfirmVisible, setReminderConfirmVisible] = useState(false);
+  const [reminderCacheKey, setReminderCacheKey] = useState<string | null>(null);
+
+  const saveReminderSetting = async (nextEnabled: boolean) => {
+    if (reminderSaving || !reminderLoaded) return;
+    setReminderSaving(true);
+    setErrorMessage('');
+    try {
+      const response = await myApi.updateReminderSettings(nextEnabled);
+      if (response?.reminder_enabled !== nextEnabled) {
+        throw new Error('서버에서 알림 설정 변경을 확인하지 못했습니다.');
+      }
+      setReminderEnabled(nextEnabled);
+      setReminderConfirmVisible(false);
+      if (reminderCacheKey) {
+        // 기기 저장소 실패가 서버 설정 성공을 되돌리지는 않는다.
+        try {
+          await AsyncStorage.setItem(reminderCacheKey, String(nextEnabled));
+        } catch (storageError) {
+          console.log('알림 설정 캐시 저장 실패:', storageError);
+        }
+      }
+    } catch (error: any) {
+      setErrorMessage(error?.message || '알림 설정 변경에 실패했습니다.');
+    } finally {
+      setReminderSaving(false);
+    }
+  };
+
+  const handleReminderStatusPress = () => {
+    if (!reminderLoaded || reminderSaving) return;
+    if (reminderEnabled) {
+      // 켜짐 > 클릭: 즉시 꺼짐으로 변경
+      void saveReminderSetting(false);
+    } else {
+      // 꺼짐 > 클릭: 허용 여부 확인창 표시
+      setReminderConfirmVisible(true);
+    }
+  };
+
   /* =========================================================
      마이페이지 데이터
   ========================================================= */
@@ -68,6 +117,18 @@ export default function MyScreen() {
 
       const profile =
         await myApi.getProfile();
+
+      // 계정별로 마지막으로 저장했던 ON/OFF 상태 표시
+      const email = String(profile?.email || '').trim().toLowerCase();
+      const cacheKey = email ? `flow:reminder_enabled:${email}` : null;
+      setReminderCacheKey(cacheKey);
+      try {
+        const cached = cacheKey ? await AsyncStorage.getItem(cacheKey) : null;
+        setReminderEnabled(cached === null ? true : cached === 'true');
+      } catch {
+        setReminderEnabled(true);
+      }
+      setReminderLoaded(true);
 
       const home =
         await homeApi.getHome();
@@ -464,41 +525,33 @@ export default function MyScreen() {
                     styles.menuCard
                   }
                 >
-                  {/* 알림 설정 */}
-
-                  <Pressable
-                    style={
-                      styles.menuRow
-                    }
-                  >
-                    <Text
-                      style={
-                        styles.menuText
-                      }
+                  {/* 알림 설정 — 오른쪽 상태 버튼만 클릭 가능 */}
+                  <View style={styles.menuRow}>
+                    <Text style={styles.menuText}>알림 설정</Text>
+                    <Pressable
+                      style={styles.menuRight}
+                      onPress={handleReminderStatusPress}
+                      disabled={!reminderLoaded || reminderSaving}
+                      hitSlop={10}
+                      accessibilityRole="button"
+                      accessibilityLabel={`알림 ${reminderEnabled ? '끄기' : '켜기'}`}
                     >
-                      알림 설정
-                    </Text>
-
-                    <View
-                      style={
-                        styles.menuRight
-                      }
-                    >
-                      <Text
-                        style={
-                          styles.menuValue
-                        }
-                      >
-                        켜짐
-                      </Text>
-
-                      <Ionicons
-                        name="chevron-forward"
-                        size={17}
-                        color="#C4C2BB"
-                      />
-                    </View>
-                  </Pressable>
+                      {reminderSaving ? (
+                        <ActivityIndicator size="small" color="#2D6A4F" />
+                      ) : (
+                        <>
+                          <Text style={styles.menuValue}>
+                            {!reminderLoaded ? '확인 중' : reminderEnabled ? '켜짐' : '꺼짐'}
+                          </Text>
+                          <Ionicons
+                            name="chevron-forward"
+                            size={17}
+                            color="#C4C2BB"
+                          />
+                        </>
+                      )}
+                    </Pressable>
+                  </View>
 
                   {/* 연결된 AI 도구 */}
 
@@ -656,6 +709,48 @@ export default function MyScreen() {
               </>
             )}
           </ScrollView>
+
+          {/* 꺼짐 > 클릭 시에만 표시되는 알림 허용 확인창 */}
+          <Modal
+            visible={reminderConfirmVisible}
+            transparent
+            animationType="fade"
+            onRequestClose={() => {
+              if (!reminderSaving) setReminderConfirmVisible(false);
+            }}
+          >
+            <View style={styles.modalOverlay}>
+              <View style={styles.modalBox}>
+                <View style={styles.modalGreenIcon}>
+                  <Ionicons name="notifications-outline" size={26} color="#2D6A4F" />
+                </View>
+                <Text style={styles.modalTitle}>알람을 허용하겠습니까?</Text>
+                <Text style={styles.modalDesc}>
+                  복습할 시간이 되면 FLOW에서 알림을 보내드려요.
+                </Text>
+                <View style={styles.modalButtonRow}>
+                  <Pressable
+                    style={styles.modalCancelButton}
+                    disabled={reminderSaving}
+                    onPress={() => setReminderConfirmVisible(false)}
+                  >
+                    <Text style={styles.modalCancelText}>취소</Text>
+                  </Pressable>
+                  <Pressable
+                    style={styles.modalConfirmButton}
+                    disabled={reminderSaving}
+                    onPress={() => void saveReminderSetting(true)}
+                  >
+                    {reminderSaving ? (
+                      <ActivityIndicator color="#FFFFFF" />
+                    ) : (
+                      <Text style={styles.modalConfirmText}>허용하기</Text>
+                    )}
+                  </Pressable>
+                </View>
+              </View>
+            </View>
+          </Modal>
 
           {/* =================================================
               로그아웃 확인 모달
