@@ -12,6 +12,7 @@ import {
 
 import {
     ActivityIndicator,
+    Modal,
     Pressable,
     ScrollView,
     StyleSheet,
@@ -69,6 +70,8 @@ type InsightItem = {
 
   question_original?: string;
 
+  bullet_summary?: string[] | null;
+
   answer_summary?: string;
 
   answer_original?: string;
@@ -77,6 +80,17 @@ type InsightItem = {
 
   created_at?: string;
 };
+
+/** 카테고리 목록에서는 개조식 요약 앞 2줄만 화면에 보입니다. */
+function formatBulletPreview(bullets?: string[] | null) {
+  if (!Array.isArray(bullets)) return '개조식 요약이 없는 이전 인사이트입니다.';
+  const clean = bullets.filter((line): line is string =>
+    typeof line === 'string' && line.trim().length > 0
+  );
+  return clean.length ? clean.map((line) => `• ${line.trim()}`).join('\n')
+                      : '개조식 요약이 없는 이전 인사이트입니다.';
+}
+
 
 /* =========================================================
    CATEGORY THEME
@@ -414,6 +428,9 @@ export default function ExploreScreen() {
     setCategoryError,
   ] =
     useState('');
+
+  // 카테고리 카드 선택 → 개조식 + 문장 요약 상세 모달
+  const [selectedInsight, setSelectedInsight] = useState<InsightItem | null>(null);
 
   /* =====================================================
      PARAM
@@ -1496,7 +1513,7 @@ export default function ExploreScreen() {
                             item,
                             index
                           ) => (
-                            <View
+                            <Pressable onPress={() => setSelectedInsight(item)} accessibilityRole="button"
                               key={
                                 item.id
                               }
@@ -1528,9 +1545,7 @@ export default function ExploreScreen() {
                                   2
                                 }
                               >
-                                {item.answer_summary ||
-                                  item.answer_original ||
-                                  '저장된 답변'}
+                                {formatBulletPreview(item.bullet_summary)}
                               </Text>
 
                               <View
@@ -1563,7 +1578,7 @@ export default function ExploreScreen() {
                                   )}
                                 </Text>
                               </View>
-                            </View>
+                            </Pressable>
                           )
                         )
                       ) : (
@@ -1641,6 +1656,76 @@ export default function ExploreScreen() {
               ) : null}
             </ScrollView>
           )}
+          {/* 카테고리별 인사이트 상세: 기존 문장 요약과 개조식을 모두 표시 */}
+          <Modal
+            visible={selectedInsight !== null}
+            transparent
+            animationType="fade"
+            onRequestClose={() => setSelectedInsight(null)}
+          >
+            <View style={styles.insightDetailOverlay}>
+              <View style={styles.insightDetailPanel}>
+                <View style={styles.insightDetailHeader}>
+                  <View style={{ flex: 1, minWidth: 0 }}>
+                    <Text style={styles.insightDetailEyebrow}>FLOW · 인사이트 상세</Text>
+                    <Text style={styles.insightDetailHeaderTitle}>인사이트 상세</Text>
+                  </View>
+                  <Pressable
+                    style={styles.insightDetailClose}
+                    onPress={() => setSelectedInsight(null)}
+                    accessibilityLabel="인사이트 상세 닫기"
+                  >
+                    <Ionicons name="close" size={20} color="#526157" />
+                  </Pressable>
+                </View>
+                <ScrollView
+                  style={styles.insightDetailScroll}
+                  contentContainerStyle={styles.insightDetailContent}
+                  showsVerticalScrollIndicator={false}
+                >
+                  <View style={styles.insightDetailCategoryPill}>
+                    <Text style={styles.insightDetailCategoryText}>
+                      {selectedCategory?.name || '카테고리'}
+                    </Text>
+                  </View>
+                  <Text style={styles.insightDetailQuestion}>
+                    {selectedInsight?.question_summary || selectedInsight?.question_original || '저장된 질문'}
+                  </Text>
+
+                  <Text style={styles.insightDetailSectionLabel}>개조식 요약</Text>
+                  <View style={styles.insightDetailBulletBox}>
+                    {Array.isArray(selectedInsight?.bullet_summary) &&
+                    selectedInsight.bullet_summary.some((line) => typeof line === 'string' && line.trim()) ? (
+                      selectedInsight.bullet_summary
+                        .filter((line): line is string => typeof line === 'string' && line.trim().length > 0)
+                        .map((line, index) => (
+                          <View style={styles.insightDetailBulletRow} key={`${index}-${line}`}>
+                            <Text style={styles.insightDetailDot}>•</Text>
+                            <Text style={styles.insightDetailBulletText}>{line}</Text>
+                          </View>
+                        ))
+                    ) : (
+                      <Text style={styles.insightDetailMissing}>이 기록에는 개조식 요약이 없어요.</Text>
+                    )}
+                  </View>
+
+                  <Text style={styles.insightDetailSectionLabel}>답변 요약 (문장)</Text>
+                  <View style={styles.insightDetailParagraphBox}>
+                    <Text style={styles.insightDetailParagraph}>
+                      {selectedInsight?.answer_summary || '이 기록에는 문장 요약이 없어요.'}
+                    </Text>
+                  </View>
+                  <Text style={styles.insightDetailHint}>저장된 요약을 그대로 보여드립니다.</Text>
+                </ScrollView>
+                <Pressable
+                  style={styles.insightDetailDone}
+                  onPress={() => setSelectedInsight(null)}
+                >
+                  <Text style={styles.insightDetailDoneText}>확인</Text>
+                </Pressable>
+              </View>
+            </View>
+          </Modal>
         </View>
       </View>
     </View>
@@ -1653,6 +1738,68 @@ export default function ExploreScreen() {
 
 const styles =
   StyleSheet.create({
+    /* 카테고리 인사이트 상세 — 탐색 탭의 기존 카드 색상 유지 */
+    insightDetailOverlay: {
+      flex: 1,
+      justifyContent: 'center',
+      alignItems: 'center',
+      backgroundColor: 'rgba(20, 35, 27, 0.45)',
+      paddingHorizontal: 18,
+      paddingVertical: 24,
+    },
+    insightDetailPanel: {
+      width: '100%',
+      maxWidth: 340,
+      maxHeight: '88%',
+      backgroundColor: '#FBFAF7',
+      borderRadius: 24,
+      overflow: 'hidden',
+    },
+    insightDetailHeader: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      paddingHorizontal: 20,
+      paddingTop: 20,
+      paddingBottom: 14,
+      borderBottomColor: '#ECE8DF',
+      borderBottomWidth: 1,
+    },
+    insightDetailEyebrow: { color: '#1F6B45', fontSize: 10, fontWeight: '800', marginBottom: 4 },
+    insightDetailHeaderTitle: { color: '#222725', fontSize: 19, fontWeight: '900' },
+    insightDetailClose: {
+      width: 34, height: 34, borderRadius: 17, backgroundColor: '#F1F1EC',
+      justifyContent: 'center', alignItems: 'center', marginLeft: 8,
+    },
+    insightDetailScroll: { flexGrow: 0, flexShrink: 1 },
+    insightDetailContent: { paddingHorizontal: 18, paddingTop: 17, paddingBottom: 20 },
+    insightDetailCategoryPill: {
+      alignSelf: 'flex-start', backgroundColor: '#E3F0E4',
+      borderRadius: 100, paddingHorizontal: 10, paddingVertical: 6,
+      marginBottom: 14,
+    },
+    insightDetailCategoryText: { color: '#195C3E', fontSize: 11, fontWeight: '800' },
+    insightDetailQuestion: { color: '#202622', fontSize: 17, fontWeight: '900', lineHeight: 25, marginBottom: 20 },
+    insightDetailSectionLabel: { color: '#2A332D', fontSize: 13, fontWeight: '900', marginBottom: 9 },
+    insightDetailBulletBox: {
+      borderWidth: 1, borderColor: '#D5E7D9', backgroundColor: '#EFF6EF',
+      paddingHorizontal: 13, paddingVertical: 13, borderRadius: 14, marginBottom: 18,
+    },
+    insightDetailBulletRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 7, marginBottom: 7 },
+    insightDetailDot: { color: '#1F6B45', fontSize: 14, fontWeight: '900', lineHeight: 20 },
+    insightDetailBulletText: { color: '#36453A', fontSize: 12, lineHeight: 20, flex: 1, minWidth: 0 },
+    insightDetailMissing: { color: '#829086', fontSize: 12, lineHeight: 20 },
+    insightDetailParagraphBox: {
+      borderWidth: 1, borderColor: '#E7E6DE', backgroundColor: '#FFFFFF',
+      padding: 13, borderRadius: 14,
+    },
+    insightDetailParagraph: { color: '#4B534C', fontSize: 12, lineHeight: 20 },
+    insightDetailHint: { color: '#969C94', fontSize: 10, marginTop: 12 },
+    insightDetailDone: {
+      backgroundColor: '#195C3E', alignItems: 'center', justifyContent: 'center',
+      borderRadius: 14, height: 44, marginHorizontal: 18, marginVertical: 15,
+    },
+    insightDetailDoneText: { color: '#FFFFFF', fontSize: 14, fontWeight: '900' },
+
     screen: {
       flex: 1,
       backgroundColor:

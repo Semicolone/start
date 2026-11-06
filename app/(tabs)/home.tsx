@@ -1,3022 +1,546 @@
+/**
+ * FLOW Home — 2026-11-06 API integration
+ * GET /api/home: user name, category distribution, recent insights
+ * GET /api/home/review_queue: real review queue, progress and review streak
+ * POST /api/insights/{id}/review: save answer and schedule the next review
+ * No mock reviews or local review progress. Push tokens use existing
+ * lib/notifications.ts (the backend schedules actual reminders).
+ */
 import { Ionicons } from '@expo/vector-icons';
 import { router, useFocusEffect } from 'expo-router';
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
+  ActivityIndicator,
   Image,
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
   Text,
   View,
 } from 'react-native';
-
-import { homeApi } from '../../lib/client';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import apiCall, { homeApi } from '../../lib/client';
+import { registerPushNotifications } from '../../lib/notifications';
 
 const logoLeaf = require('../../assets/images/logo_leaf.png');
 
-/* =========================================================
-   HEATMAP
-========================================================= */
-
-const heatmapColors = [
-  '#EEF4EA',
-  '#DCEACF',
-  '#BFD8A9',
-  '#6FA46C',
-];
-
-type HeatmapData = Record<string, number>;
-
-type HeatmapResult = {
-  rows: number[][];
-  label: string;
+const C = {
+  bg: '#F7F6F2',
+  paper: '#FFFFFF',
+  forest: '#195C3E',
+  forestDark: '#134F35',
+  forestLight: '#E8F1E8',
+  forestMuted: '#7EAC92',
+  ink: '#242623',
+  muted: '#8D938D',
+  line: '#E7E9E3',
+  purple: '#9C8AC5',
+  rose: '#C78694',
+  sage: '#83AC91',
 };
 
-/* =========================================================
-   한국 날짜
-========================================================= */
+type ReviewChoice = 'forgot' | 'unsure' | 'remember';
+type ReviewOutcome = '전혀기억안남' | '헷갈림' | '기억남';
+type ReviewState = 'empty' | 'complete' | 'in_progress';
 
-/*
- * 현재 한국 날짜를 가져옴.
- *
- * 예:
- *
- * 한국 시간
- * 2026-08-28 01:00
- *
- * UTC
- * 2026-08-27 16:00
- *
- * 일반 new Date()에 의존하지 않고
- * Asia/Seoul 기준 년/월/일을 직접 가져옴.
- *
- * 반환 Date는 UTC 자정으로 만들어서
- * 이후 날짜 +/- 계산도 timezone 영향을 받지 않게 함.
- */
-function getKoreaToday() {
-  const formatter =
-    new Intl.DateTimeFormat(
-      'en-US',
-      {
-        timeZone:
-          'Asia/Seoul',
-
-        year:
-          'numeric',
-
-        month:
-          '2-digit',
-
-        day:
-          '2-digit',
-      }
-    );
-
-  const parts =
-    formatter.formatToParts(
-      new Date()
-    );
-
-  const year =
-    Number(
-      parts.find(
-        (part) =>
-          part.type ===
-          'year'
-      )?.value
-    );
-
-  const month =
-    Number(
-      parts.find(
-        (part) =>
-          part.type ===
-          'month'
-      )?.value
-    );
-
-  const day =
-    Number(
-      parts.find(
-        (part) =>
-          part.type ===
-          'day'
-      )?.value
-    );
-
-  return new Date(
-    Date.UTC(
-      year,
-      month - 1,
-      day
-    )
-  );
-}
-
-/* =========================================================
-   날짜 UTIL
-========================================================= */
-
-function formatDateKey(
-  date: Date
-) {
-  const year =
-    date.getUTCFullYear();
-
-  const month =
-    String(
-      date.getUTCMonth() + 1
-    ).padStart(
-      2,
-      '0'
-    );
-
-  const day =
-    String(
-      date.getUTCDate()
-    ).padStart(
-      2,
-      '0'
-    );
-
-  return `${year}-${month}-${day}`;
-}
-
-function formatShortDate(
-  date: Date
-) {
-  return `${
-    date.getUTCMonth() + 1
-  }/${date.getUTCDate()}`;
-}
-
-/* =========================================================
-   HEATMAP LEVEL
-========================================================= */
-
-function getHeatmapLevel(
-  count: number
-) {
-  if (count <= 0) {
-    return 0;
-  }
-
-  if (count === 1) {
-    return 1;
-  }
-
-  if (count === 2) {
-    return 2;
-  }
-
-  return 3;
-}
-
-/* =========================================================
-   최근 28일 HEATMAP
-========================================================= */
-
-/*
- * 한국 오늘 기준 최근 28일
- *
- * 오늘이 8/28이면
- *
- * 8/1 ~ 8/28
- *
- * 왼쪽 위 = 가장 오래된 날짜
- * 오른쪽 아래 = 오늘
- */
-function buildRecent28Heatmap(
-  heatmap?: HeatmapData
-): HeatmapResult {
-  const today =
-    getKoreaToday();
-
-  /*
-   * 오늘 포함 최근 28일
-   * 시작 날짜 = 오늘 - 27일
-   */
-  const firstDate =
-    new Date(
-      today.getTime()
-    );
-
-  firstDate.setUTCDate(
-    firstDate.getUTCDate() -
-      27
-  );
-
-  const flatLevels:
-    number[] = [];
-
-  /*
-   * 정확히 28개의 날짜 생성
-   */
-  for (
-    let index = 0;
-    index < 28;
-    index += 1
-  ) {
-    const date =
-      new Date(
-        firstDate.getTime()
-      );
-
-    date.setUTCDate(
-      firstDate.getUTCDate() +
-        index
-    );
-
-    const dateKey =
-      formatDateKey(
-        date
-      );
-
-    const count =
-      Number(
-        heatmap?.[
-          dateKey
-        ] ?? 0
-      );
-
-    flatLevels.push(
-      getHeatmapLevel(
-        count
-      )
-    );
-  }
-
-  /*
-   * 28개
-   * →
-   * 7개 × 4줄
-   */
-  const rows = [
-    flatLevels.slice(
-      0,
-      7
-    ),
-
-    flatLevels.slice(
-      7,
-      14
-    ),
-
-    flatLevels.slice(
-      14,
-      21
-    ),
-
-    flatLevels.slice(
-      21,
-      28
-    ),
-  ];
-
-  return {
-    rows,
-
-    label:
-      `${formatShortDate(
-        firstDate
-      )} - ${formatShortDate(
-        today
-      )}`,
-  };
-}
-
-/* =========================================================
-   STREAK
-========================================================= */
-
-/*
- * 연속 기록 일수
- *
- * 한국 날짜 기준.
- *
- * 오늘 기록이 있으면 오늘부터 계산.
- * 오늘 기록이 아직 없으면 어제부터 계산.
- */
-function getCurrentStreak(
-  heatmap?: HeatmapData
-) {
-  if (
-    !heatmap ||
-    typeof heatmap !==
-      'object'
-  ) {
-    return 0;
-  }
-
-  const currentDate =
-    getKoreaToday();
-
-  const todayKey =
-    formatDateKey(
-      currentDate
-    );
-
-  const todayCount =
-    Number(
-      heatmap[
-        todayKey
-      ] ?? 0
-    );
-
-  /*
-   * 오늘 아직 기록이 없으면
-   * 어제부터 확인
-   */
-  if (todayCount <= 0) {
-    currentDate.setUTCDate(
-      currentDate.getUTCDate() -
-        1
-    );
-  }
-
-  let streak = 0;
-
-  while (true) {
-    const key =
-      formatDateKey(
-        currentDate
-      );
-
-    const count =
-      Number(
-        heatmap[
-          key
-        ] ?? 0
-      );
-
-    if (count <= 0) {
-      break;
-    }
-
-    streak += 1;
-
-    currentDate.setUTCDate(
-      currentDate.getUTCDate() -
-        1
-    );
-  }
-
-  return streak;
-}
-
-/* =========================================================
-   TYPES
-========================================================= */
-
-type HomeData = {
-  username: string;
-
-  totalQuestions: number;
-
-  activeDays: number;
-
-  aiToolCount: number;
+type ReviewItem = {
+  id: number;
+  question: string;
+  category: string;
+  savedLabel: string;
+  bullets: string[];
 };
 
 type CategoryItem = {
   name: string;
-
-  percent: number;
-
-  count: number;
-
+  percentage: number;
   color: string;
-
-  icon:
-    keyof typeof Ionicons.glyphMap;
 };
 
-type RecentQuestion = {
+type RecentInsight = {
+  id: number | null;
   question: string;
-
-  answer: string;
-
-  source: string;
-
-  category: string;
-
-  categoryColor: string;
-
-  categoryBg: string;
-
-  date: string;
+  bullets: string[];
 };
 
-/* =========================================================
-   FALLBACK DATA
-========================================================= */
-
-const mockCategoryData:
-  CategoryItem[] = [
-    {
-      name:
-        '학습/공부',
-
-      percent:
-        40,
-
-      count:
-        0,
-
-      color:
-        '#1F7A4D',
-
-      icon:
-        'book-outline',
-    },
-
-    {
-      name:
-        '일상',
-
-      percent:
-        20,
-
-      count:
-        0,
-
-      color:
-        '#A6A299',
-
-      icon:
-        'sunny-outline',
-    },
-
-    {
-      name:
-        '커리어/진로',
-
-      percent:
-        20,
-
-      count:
-        0,
-
-      color:
-        '#8B6CC7',
-
-      icon:
-        'briefcase-outline',
-    },
-
-    {
-      name:
-        '감정/고민',
-
-      percent:
-        20,
-
-      count:
-        0,
-
-      color:
-        '#D45D79',
-
-      icon:
-        'heart-outline',
-    },
-  ];
-
-const mockRecentQuestions:
-  RecentQuestion[] = [
-    {
-      question:
-        '개발자 취업 vs 대학원 진학',
-
-      answer:
-        '취업은 빠른 실무 경험, 대학원은 연구 역량 강화에 유리해요.',
-
-      source:
-        'Claude',
-
-      category:
-        '커리어/진로',
-
-      categoryColor:
-        '#8B6CC7',
-
-      categoryBg:
-        '#F2EAFE',
-
-      date:
-        '5/14',
-    },
-
-    {
-      question:
-        'Zustand vs Redux 비교',
-
-      answer:
-        '소규모 프로젝트는 Zustand, 대형 프로젝트는 Redux가 유리할 수 있어요.',
-
-      source:
-        'ChatGPT',
-
-      category:
-        '개발',
-
-      categoryColor:
-        '#4267D9',
-
-      categoryBg:
-        '#EEF2FF',
-
-      date:
-        '5/13',
-    },
-
-    {
-      question:
-        '자기소개서 지원 동기 작성법',
-
-      answer:
-        '구체적인 경험과 지원 회사의 특징을 연결해 작성하는 것이 좋아요.',
-
-      source:
-        'Claude',
-
-      category:
-        '커리어/진로',
-
-      categoryColor:
-        '#8B6CC7',
-
-      categoryBg:
-        '#F2EAFE',
-
-      date:
-        '5/12',
-    },
-  ];
-
-/* =========================================================
-   CATEGORY UTIL
-========================================================= */
-
-function getCategoryStyle(
-  categoryName?: string
-) {
-  if (!categoryName) {
-    return {
-      category:
-        '기타',
-
-      categoryColor:
-        '#2D6A4F',
-
-      categoryBg:
-        '#EAF7F0',
-    };
-  }
-
-  if (
-    categoryName.includes(
-      '커리어'
-    ) ||
-    categoryName.includes(
-      '진로'
-    ) ||
-    categoryName.includes(
-      '업무'
-    )
-  ) {
-    return {
-      category:
-        categoryName,
-
-      categoryColor:
-        '#8B6CC7',
-
-      categoryBg:
-        '#F2EAFE',
-    };
-  }
-
-  if (
-    categoryName.includes(
-      '개발'
-    ) ||
-    categoryName.includes(
-      '코딩'
-    ) ||
-    categoryName.includes(
-      '프로그래밍'
-    )
-  ) {
-    return {
-      category:
-        categoryName,
-
-      categoryColor:
-        '#4267D9',
-
-      categoryBg:
-        '#EEF2FF',
-    };
-  }
-
-  if (
-    categoryName.includes(
-      '학습'
-    ) ||
-    categoryName.includes(
-      '공부'
-    ) ||
-    categoryName.includes(
-      '학교'
-    )
-  ) {
-    return {
-      category:
-        categoryName,
-
-      categoryColor:
-        '#2D9E6B',
-
-      categoryBg:
-        '#EAF7F0',
-    };
-  }
-
-  if (
-    categoryName.includes(
-      '감정'
-    ) ||
-    categoryName.includes(
-      '고민'
-    ) ||
-    categoryName.includes(
-      '관계'
-    )
-  ) {
-    return {
-      category:
-        categoryName,
-
-      categoryColor:
-        '#D45D79',
-
-      categoryBg:
-        '#FCEEEF',
-    };
-  }
-
-  if (
-    categoryName.includes(
-      '일상'
-    )
-  ) {
-    return {
-      category:
-        categoryName,
-
-      categoryColor:
-        '#888780',
-
-      categoryBg:
-        '#F5F4F0',
-    };
-  }
-
-  if (
-    categoryName.includes(
-      '창작'
-    ) ||
-    categoryName.includes(
-      '아이디어'
-    )
-  ) {
-    return {
-      category:
-        categoryName,
-
-      categoryColor:
-        '#F4A261',
-
-      categoryBg:
-        '#FFF4E8',
-    };
-  }
-
-  return {
-    category:
-      categoryName,
-
-    categoryColor:
-      '#2D6A4F',
-
-    categoryBg:
-      '#EAF7F0',
-  };
+type ReviewProgress = { completed: number; total: number };
+
+const OUTCOME_BY_CHOICE: Record<ReviewChoice, ReviewOutcome> = {
+  forgot: '전혀기억안남',
+  unsure: '헷갈림',
+  remember: '기억남',
+};
+
+function formatSavedLabel(createdAt?: string): string {
+  if (!createdAt) return '저장된 인사이트';
+  const parsed = new Date(createdAt.endsWith('Z') || /[+-]\d\d:\d\d$/.test(createdAt) ? createdAt : createdAt + 'Z');
+  if (!Number.isFinite(parsed.getTime())) return '저장된 인사이트';
+  const days = Math.max(0, Math.floor((Date.now() - parsed.getTime()) / 86400000));
+  if (days === 0) return '오늘 저장';
+  return `${days}일 전 저장`;
 }
 
-function getCategoryTheme(
-  name: string,
-  index: number
-) {
-  if (
-    name.includes(
-      '커리어'
-    ) ||
-    name.includes(
-      '진로'
-    ) ||
-    name.includes(
-      '업무'
-    )
-  ) {
-    return {
-      color:
-        '#8B6CC7',
-
-      icon:
-        'briefcase-outline' as const,
-    };
-  }
-
-  if (
-    name.includes(
-      '개발'
-    ) ||
-    name.includes(
-      '코딩'
-    ) ||
-    name.includes(
-      '프로그래밍'
-    )
-  ) {
-    return {
-      color:
-        '#4267D9',
-
-      icon:
-        'code-slash-outline' as const,
-    };
-  }
-
-  if (
-    name.includes(
-      '학습'
-    ) ||
-    name.includes(
-      '공부'
-    ) ||
-    name.includes(
-      '학교'
-    )
-  ) {
-    return {
-      color:
-        '#2D9E6B',
-
-      icon:
-        'book-outline' as const,
-    };
-  }
-
-  if (
-    name.includes(
-      '감정'
-    ) ||
-    name.includes(
-      '고민'
-    ) ||
-    name.includes(
-      '관계'
-    )
-  ) {
-    return {
-      color:
-        '#D45D79',
-
-      icon:
-        'heart-outline' as const,
-    };
-  }
-
-  if (
-    name.includes(
-      '일상'
-    )
-  ) {
-    return {
-      color:
-        '#A6A299',
-
-      icon:
-        'sunny-outline' as const,
-    };
-  }
-
-  if (
-    name.includes(
-      '창작'
-    ) ||
-    name.includes(
-      '아이디어'
-    )
-  ) {
-    return {
-      color:
-        '#F4A261',
-
-      icon:
-        'bulb-outline' as const,
-    };
-  }
-
-  const themes = [
-    {
-      color:
-        '#2D9E6B',
-
-      icon:
-        'book-outline' as const,
-    },
-
-    {
-      color:
-        '#A6A299',
-
-      icon:
-        'sunny-outline' as const,
-    },
-
-    {
-      color:
-        '#8B6CC7',
-
-      icon:
-        'briefcase-outline' as const,
-    },
-
-    {
-      color:
-        '#D45D79',
-
-      icon:
-        'heart-outline' as const,
-    },
-  ];
-
-  return themes[
-    index %
-      themes.length
-  ];
+function toBulletList(value: unknown): string[] {
+  return Array.isArray(value)
+    ? value.filter((s): s is string => typeof s === 'string' && Boolean(s.trim())).map((s) => s.trim())
+    : [];
 }
 
-/* =========================================================
-   RECENT DATE
-========================================================= */
-
-function formatDate(
-  raw?: string
-) {
-  if (!raw) {
-    return '';
-  }
-
-  if (
-    raw.includes(
-      'T'
-    )
-  ) {
-    return raw
-      .slice(
-        5,
-        10
-      )
-      .replace(
-        '-',
-        '/'
-      );
-  }
-
-  if (
-    raw.includes(
-      '-'
-    )
-  ) {
-    return raw
-      .slice(
-        5,
-        10
-      )
-      .replace(
-        '-',
-        '/'
-      );
-  }
-
-  return raw;
+function categoryColor(name: string, index: number): string {
+  if (/학습|공부|학교|교육/.test(name)) return C.forest;
+  if (/진로|커리어|취업/.test(name)) return C.purple;
+  if (/감정|고민|관계/.test(name)) return C.rose;
+  if (/개발|코딩/.test(name)) return '#5B9C88';
+  return [C.sage, '#B7A789', '#8D9AA7', '#ABB797'][index % 4];
 }
 
-/* =========================================================
-   HOME
-========================================================= */
+function summaryBullets(text?: string): string[] {
+  if (!text || !text.trim()) return ['요약된 내용을 확인해 보세요.'];
+  return text
+    .replace(/^[\s\-•·]+/gm, '')
+    .split(/\n+|\s*•\s*|\s*·\s*/)
+    .map((item) => item.trim())
+    .filter(Boolean)
+    .slice(0, 3);
+}
 
-export default function HomeScreen() {
-  const [
-    homeData,
-    setHomeData,
-  ] =
-    useState<HomeData>({
-      username:
-        '채원',
-
-      totalQuestions:
-        0,
-
-      activeDays:
-        0,
-
-      aiToolCount:
-        0,
-    });
-
-  const [
-    categoryData,
-    setCategoryData,
-  ] =
-    useState<
-      CategoryItem[]
-    >(
-      mockCategoryData
-    );
-
-  const [
-    recentQuestions,
-    setRecentQuestions,
-  ] =
-    useState<
-      RecentQuestion[]
-    >(
-      mockRecentQuestions
-    );
-
-  /*
-   * 최근 28일
-   *
-   * 4행 × 7열
-   */
-  const [
-    heatmapRows,
-    setHeatmapRows,
-  ] =
-    useState<
-      number[][]
-    >(
-      Array.from(
-        {
-          length:
-            4,
-        },
-
-        () =>
-          Array(
-            7
-          ).fill(0)
-      )
-    );
-
-  /*
-   * 8/1 - 8/28
-   */
-  const [
-    heatmapLabel,
-    setHeatmapLabel,
-  ] =
-    useState(
-      ''
-    );
-
-  /*
-   * n일 연속 기록
-   */
-  const [
-    streakDays,
-    setStreakDays,
-  ] =
-    useState(0);
-
-  /* =====================================================
-     HOME API
-  ===================================================== */
-
-  const fetchHomeData =
-    async () => {
-      try {
-        const data =
-          await homeApi.getHome();
-
-        console.log(
-          '홈 API 응답:',
-          data
-        );
-
-        /* =================================
-           HEATMAP
-        ================================= */
-
-        const heatmapResult =
-          buildRecent28Heatmap(
-            data?.heatmap
-          );
-
-        setHeatmapRows(
-          heatmapResult.rows
-        );
-
-        setHeatmapLabel(
-          heatmapResult.label
-        );
-
-        setStreakDays(
-          getCurrentStreak(
-            data?.heatmap
-          )
-        );
-
-        /* =================================
-           HOME DATA
-        ================================= */
-
-        const greetingText =
-          data?.greeting ||
-          '';
-
-        const extractedName =
-          data?.username ||
-          data?.name ||
-          data?.user
-            ?.username ||
-          data?.user
-            ?.name ||
-          (
-            greetingText.includes(
-              '님'
-            )
-              ? greetingText.split(
-                  '님'
-                )[0]
-              : '채원'
-          );
-
-        setHomeData({
-          username:
-            extractedName,
-
-          totalQuestions:
-            data?.total_insights ??
-            data?.totalQuestions ??
-            data?.total_questions ??
-            0,
-
-          activeDays:
-            data?.active_days ??
-            data?.activeDays ??
-            data?.monthly_active_days ??
-            data?.this_month_active_days ??
-            0,
-
-          aiToolCount:
-            data?.ai_tool_count ??
-            data?.aiToolCount ??
-            data?.used_ai_tool_count ??
-            data?.ai_source_count ??
-            0,
-        });
-
-        /* =================================
-           최근 인사이트
-        ================================= */
-
-        if (
-          Array.isArray(
-            data?.recent_insights
-          )
-        ) {
-          const mappedRecent =
-            data
-              .recent_insights
-              .slice(
-                0,
-                3
-              )
-              .map(
-                (
-                  item: any
-                ) => {
-                  const categoryInfo =
-                    getCategoryStyle(
-                      item?.category_name ||
-                        item?.category ||
-                        item?.categoryName ||
-                        item
-                          ?.category
-                          ?.name
-                    );
-
-                  return {
-                    question:
-                      item?.question_summary ||
-                      item?.question_original ||
-                      item?.question ||
-                      '저장된 질문',
-
-                    answer:
-                      item?.answer_summary ||
-                      item?.answer_original ||
-                      item?.answer ||
-                      '저장된 답변 요약이 없습니다.',
-
-                    source:
-                      item?.ai_source ||
-                      item?.source ||
-                      'AI',
-
-                    category:
-                      categoryInfo
-                        .category,
-
-                    categoryColor:
-                      categoryInfo
-                        .categoryColor,
-
-                    categoryBg:
-                      categoryInfo
-                        .categoryBg,
-
-                    date:
-                      formatDate(
-                        item?.created_at ||
-                          item?.date
-                      ),
-                  };
-                }
-              );
-
-          setRecentQuestions(
-            mappedRecent
-          );
-        }
-
-        /* =================================
-           CATEGORY
-        ================================= */
-
-        if (
-          Array.isArray(
-            data?.category_distribution
-          )
-        ) {
-          const mappedCategories =
-            data
-              .category_distribution
-              .map(
-                (
-                  item: any,
-                  index: number
-                ) => {
-                  const name =
-                    item?.name ||
-                    item?.category ||
-                    item?.category_name ||
-                    '기타';
-
-                  const theme =
-                    getCategoryTheme(
-                      name,
-                      index
-                    );
-
-                  return {
-                    name,
-
-                    percent:
-                      Number(
-                        item?.percent ??
-                          0
-                      ),
-
-                    count:
-                      Number(
-                        item?.count ??
-                          0
-                      ),
-
-                    color:
-                      theme.color,
-
-                    icon:
-                      theme.icon,
-                  };
-                }
-              );
-
-          setCategoryData(
-            mappedCategories
-          );
-        }
-      } catch (
-        error
-      ) {
-        console.log(
-          '홈 데이터 불러오기 실패:',
-          error
-        );
-      }
-    };
-
-  /*
-   * Home으로 돌아올 때마다
-   * 데이터 다시 불러오기
-   */
-  useFocusEffect(
-    useCallback(
-      () => {
-        fetchHomeData();
-      },
-      []
-    )
-  );
-
-  const sortedCategories =
-    [
-      ...categoryData,
-    ]
-      .sort(
-        (
-          a,
-          b
-        ) =>
-          Number(
-            b.percent
-          ) -
-          Number(
-            a.percent
-          )
-      )
-      .slice(
-        0,
-        4
-      );
-
-  const topCategory =
-    sortedCategories.length >
-    0
-      ? sortedCategories[
-          0
-        ]
-      : null;
-
+function ProgressCard({ completed, total }: { completed: number; total: number }) {
+  const ratio = total > 0 ? Math.min(100, (completed / total) * 100) : 0;
   return (
-    <View
-      style={
-        styles.screen
-      }
-    >
-      <View
-        style={
-          styles.outer
-        }
-      >
-        <View
-          style={
-            styles.phone
-          }
-        >
-          <View
-            style={
-              styles.topLeafBg
-            }
-          />
-
-          {/* =================================================
-              HEADER
-          ================================================= */}
-
-          <View
-            style={
-              styles.header
-            }
-          >
-            <View
-              style={
-                styles.headerSide
-              }
-            />
-
-            <View
-              style={
-                styles.logoRow
-              }
-            >
-              <Image
-                source={
-                  logoLeaf
-                }
-                style={
-                  styles.logoLeaf
-                }
-                resizeMode="contain"
-              />
-
-              <Text
-                style={
-                  styles.logoText
-                }
-              >
-                FLOW
-              </Text>
-            </View>
-
-            {/* 돋보기 제거 후
-                가운데 FLOW 위치 유지 */}
-            <View
-              style={
-                styles.headerSide
-              }
-            />
-          </View>
-
-          <ScrollView
-            style={
-              styles.scroll
-            }
-            contentContainerStyle={
-              styles.scrollContent
-            }
-            showsVerticalScrollIndicator={
-              false
-            }
-          >
-            {/* =================================================
-                초록 인사이트 카드
-            ================================================= */}
-
-            <View
-              style={
-                styles.insightCard
-              }
-            >
-              <View
-                style={
-                  styles.insightCardDecorTop
-                }
-              />
-
-              <View
-                style={
-                  styles.insightCardDecorBottom
-                }
-              />
-
-              <Text
-                style={
-                  styles.insightGreeting
-                }
-              >
-                안녕하세요,{' '}
-                {
-                  homeData.username
-                }
-                님 👋
-              </Text>
-
-              <View
-                style={
-                  styles.insightCountRow
-                }
-              >
-                <Text
-                  style={
-                    styles.insightCount
-                  }
-                >
-                  {
-                    homeData.totalQuestions
-                  }
-                </Text>
-
-                <Text
-                  style={
-                    styles.insightCountLabel
-                  }
-                >
-                  개의 인사이트
-                </Text>
-              </View>
-
-              <Text
-                style={
-                  styles.insightSub
-                }
-              >
-                이번 달 나를 알아가는 기록이에요
-              </Text>
-
-              <View
-                style={
-                  styles.insightBottomRow
-                }
-              >
-                <View
-                  style={
-                    styles.insightMiniStat
-                  }
-                >
-                  <Text
-                    style={
-                      styles.insightMiniLabel
-                    }
-                  >
-                    활동일
-                  </Text>
-
-                  <Text
-                    style={
-                      styles.insightMiniValue
-                    }
-                  >
-                    {
-                      homeData.activeDays
-                    }
-                    일
-                  </Text>
-                </View>
-
-                <View
-                  style={
-                    styles.insightMiniStat
-                  }
-                >
-                  <Text
-                    style={
-                      styles.insightMiniLabel
-                    }
-                  >
-                    AI 도구
-                  </Text>
-
-                  <Text
-                    style={
-                      styles.insightMiniValue
-                    }
-                  >
-                    {
-                      homeData.aiToolCount
-                    }
-                    개
-                  </Text>
-                </View>
-
-                {/* 오른쪽 화살표 → 월간 회고 */}
-
-                <Pressable
-                  style={
-                    styles.insightArrowBox
-                  }
-                  onPress={() =>
-                    router.push({
-                      pathname:
-                        '/ai-report',
-
-                      params: {
-                        tab:
-                          'monthly',
-                      },
-                    })
-                  }
-                >
-                  <Ionicons
-                    name="arrow-forward"
-                    size={
-                      21
-                    }
-                    color="#FFFFFF"
-                  />
-                </Pressable>
-              </View>
-            </View>
-
-            {/* =================================================
-                활동 히트맵
-
-                ★ 한국 기준 최근 28일
-                ★ 요일 없음
-                ★ 최근 28일 글씨 없음
-                ★ 날짜 가운데
-                ★ 4 x 7
-            ================================================= */}
-
-            <View
-              style={
-                styles.heatmapCard
-              }
-            >
-              <View
-                style={
-                  styles.cardHeader
-                }
-              >
-                <View>
-                  <Text
-                    style={
-                      styles.cardTitle
-                    }
-                  >
-                    활동 히트맵
-                  </Text>
-
-                  <Text
-                    style={
-                      styles.heatmapSubtitle
-                    }
-                  >
-                    {streakDays}일 연속 기록 중이에요
-                  </Text>
-                </View>
-
-                <Pressable
-                  onPress={() =>
-                    router.push(
-                      '/explore?tab=calendar'
-                    )
-                  }
-                >
-                  <Text
-                    style={
-                      styles.viewAllText
-                    }
-                  >
-                    캘린더 보기 →
-                  </Text>
-                </Pressable>
-              </View>
-
-              {/* 날짜 범위만 가운데 표시 */}
-
-              <Text
-                style={
-                  styles.heatmapDateText
-                }
-              >
-                {
-                  heatmapLabel
-                }
-              </Text>
-
-              {/* 28개 */}
-
-              <View
-                style={
-                  styles.heatmapGrid
-                }
-              >
-                {
-                  heatmapRows.map(
-                    (
-                      row,
-                      rowIndex
-                    ) => (
-                      <View
-                        key={
-                          rowIndex
-                        }
-                        style={
-                          styles.heatmapRow
-                        }
-                      >
-                        {
-                          row.map(
-                            (
-                              level,
-                              index
-                            ) => (
-                              <View
-                                key={`${rowIndex}-${index}`}
-                                style={[
-                                  styles.heatCell,
-
-                                  {
-                                    backgroundColor:
-                                      heatmapColors[
-                                        level
-                                      ] ||
-                                      heatmapColors[
-                                        0
-                                      ],
-                                  },
-                                ]}
-                              />
-                            )
-                          )
-                        }
-                      </View>
-                    )
-                  )
-                }
-              </View>
-
-              {/* 적음 / 많음 */}
-
-              <View
-                style={
-                  styles.legendRow
-                }
-              >
-                <Text
-                  style={
-                    styles.legendText
-                  }
-                >
-                  적음
-                </Text>
-
-                <View
-                  style={
-                    styles.legendCells
-                  }
-                >
-                  {
-                    heatmapColors.map(
-                      (
-                        color
-                      ) => (
-                        <View
-                          key={
-                            color
-                          }
-                          style={[
-                            styles.legendCell,
-
-                            {
-                              backgroundColor:
-                                color,
-                            },
-                          ]}
-                        />
-                      )
-                    )
-                  }
-                </View>
-
-                <Text
-                  style={
-                    styles.legendText
-                  }
-                >
-                  많음
-                </Text>
-              </View>
-            </View>
-
-            {/* =================================================
-                CATEGORY
-            ================================================= */}
-
-            <View
-              style={
-                styles.categoryCard
-              }
-            >
-              <Text
-                style={
-                  styles.categoryTitle
-                }
-              >
-                무엇을 많이 물었나요
-              </Text>
-
-              {
-                topCategory ? (
-                  <Text
-                    style={
-                      styles.categorySubtitle
-                    }
-                  >
-                    {
-                      topCategory.name
-                    }
-                    를 가장 많이 물었어요
-                  </Text>
-                ) : (
-                  <Text
-                    style={
-                      styles.categorySubtitle
-                    }
-                  >
-                    질문을 기록하면 관심 주제를 보여드려요
-                  </Text>
-                )
-              }
-
-              {
-                sortedCategories.length >
-                0 ? (
-                  <>
-                    <View
-                      style={
-                        styles.categoryStackBar
-                      }
-                    >
-                      {
-                        sortedCategories.map(
-                          (
-                            item,
-                            index
-                          ) => (
-                            <View
-                              key={
-                                item.name
-                              }
-                              style={[
-                                styles.categoryStackPart,
-
-                                {
-                                  flex:
-                                    Math.max(
-                                      item.percent,
-                                      1
-                                    ),
-
-                                  backgroundColor:
-                                    item.color,
-
-                                  marginRight:
-                                    index ===
-                                    sortedCategories.length -
-                                      1
-                                      ? 0
-                                      : 3,
-                                },
-                              ]}
-                            />
-                          )
-                        )
-                      }
-                    </View>
-
-                    <View
-                      style={
-                        styles.categoryLegendGrid
-                      }
-                    >
-                      {
-                        sortedCategories.map(
-                          (
-                            item
-                          ) => (
-                            <View
-                              key={
-                                item.name
-                              }
-                              style={
-                                styles.categoryLegendItem
-                              }
-                            >
-                              <View
-                                style={
-                                  styles.categoryLegendLeft
-                                }
-                              >
-                                <View
-                                  style={[
-                                    styles.categoryDot,
-
-                                    {
-                                      backgroundColor:
-                                        item.color,
-                                    },
-                                  ]}
-                                />
-
-                                <Text
-                                  style={
-                                    styles.categoryLegendName
-                                  }
-                                  numberOfLines={
-                                    1
-                                  }
-                                >
-                                  {
-                                    item.name
-                                  }
-                                </Text>
-                              </View>
-
-                              <Text
-                                style={
-                                  styles.categoryLegendPercent
-                                }
-                              >
-                                {
-                                  Math.round(
-                                    item.percent
-                                  )
-                                }
-                                %
-                              </Text>
-                            </View>
-                          )
-                        )
-                      }
-                    </View>
-                  </>
-                ) : (
-                  <Text
-                    style={
-                      styles.emptySmallText
-                    }
-                  >
-                    아직 카테고리 데이터가 없어요.
-                  </Text>
-                )
-              }
-            </View>
-
-            {/* =================================================
-                최근 인사이트
-            ================================================= */}
-
-            <View
-              style={
-                styles.recentCard
-              }
-            >
-              <View
-                style={
-                  styles.sectionHeader
-                }
-              >
-                <Text
-                  style={
-                    styles.recentTitle
-                  }
-                >
-                  최근 인사이트
-                </Text>
-
-                <Pressable
-                  onPress={() =>
-                    router.push(
-                      '/recent'
-                    )
-                  }
-                >
-                  <Text
-                    style={
-                      styles.viewAllText
-                    }
-                  >
-                    전체 보기 →
-                  </Text>
-                </Pressable>
-              </View>
-
-              {
-                recentQuestions.length >
-                0 ? (
-                  recentQuestions.map(
-                    (
-                      item,
-                      index
-                    ) => (
-                      <View
-                        key={`${item.question}-${index}`}
-                        style={[
-                          styles.recentItem,
-
-                          index !==
-                            recentQuestions.length -
-                              1 &&
-                            styles.recentDivider,
-                        ]}
-                      >
-                        <Text
-                          style={
-                            styles.recentQuestion
-                          }
-                        >
-                          {
-                            item.question
-                          }
-                        </Text>
-
-                        <Text
-                          style={
-                            styles.recentAnswer
-                          }
-                        >
-                          {
-                            item.answer
-                          }
-                        </Text>
-
-                        <View
-                          style={
-                            styles.recentMetaRow
-                          }
-                        >
-                          <View
-                            style={
-                              styles.sourceBadge
-                            }
-                          >
-                            <Text
-                              style={
-                                styles.sourceBadgeText
-                              }
-                            >
-                              {
-                                item.source
-                              }
-                            </Text>
-                          </View>
-
-                          <View
-                            style={[
-                              styles.categoryBadge,
-
-                              {
-                                backgroundColor:
-                                  item.categoryBg,
-
-                                borderColor:
-                                  item.categoryColor +
-                                  '55',
-                              },
-                            ]}
-                          >
-                            <Text
-                              style={[
-                                styles.categoryBadgeText,
-
-                                {
-                                  color:
-                                    item.categoryColor,
-                                },
-                              ]}
-                            >
-                              {
-                                item.category
-                              }
-                            </Text>
-                          </View>
-
-                          <Text
-                            style={
-                              styles.dateText
-                            }
-                          >
-                            {
-                              item.date
-                            }
-                          </Text>
-                        </View>
-                      </View>
-                    )
-                  )
-                ) : (
-                  <Text
-                    style={
-                      styles.emptySmallText
-                    }
-                  >
-                    아직 최근 인사이트가 없어요.
-                  </Text>
-                )
-              }
-            </View>
-          </ScrollView>
-        </View>
+    <View style={styles.progressCard}>
+      <View style={styles.decorCircle} />
+      <View style={styles.progressHeadingRow}>
+        <Text style={styles.progressEyebrow}>오늘의 복습</Text>
       </View>
+      {total > 0 ? (
+        <>
+          <View style={styles.progressCountRow}>
+            <Text style={styles.progressCount}>{completed}</Text>
+            <Text style={styles.progressCountSmall}>/ {total}개 완료</Text>
+          </View>
+          <View style={styles.progressTrack}>
+            <View style={[styles.progressFill, { width: `${ratio}%` }]} />
+          </View>
+          {completed === total && <Text style={styles.progressDone}>🎉 오늘 복습 끝!</Text>}
+        </>
+      ) : (
+        <>
+          <Text style={styles.noReviewLarge}>복습할 게 없어요</Text>
+          <Text style={styles.noReviewCaption}>인사이트를 쌓으면 복습이 시작돼요</Text>
+        </>
+      )}
     </View>
   );
 }
 
-/* =========================================================
-   STYLE
-========================================================= */
-
-const styles =
-  StyleSheet.create({
-    screen: {
-      flex:
-        1,
-
-      backgroundColor:
-        '#EAE5DA',
-    },
-
-    outer: {
-      flex:
-        1,
-
-      alignItems:
-        'center',
-
-      justifyContent:
-        'center',
-
-      backgroundColor:
-        '#EAE5DA',
-    },
-
-    phone: {
-      width:
-        '100%',
-
-      maxWidth:
-        360,
-
-      height:
-        '100%',
-
-      minHeight:
-        640,
-
-      backgroundColor:
-        '#F7F6F1',
-
-      position:
-        'relative',
-
-      overflow:
-        'hidden',
-    },
-
-    topLeafBg: {
-      position:
-        'absolute',
-
-      top:
-        70,
-
-      right:
-        -40,
-
-      width:
-        205,
-
-      height:
-        82,
-
-      borderRadius:
-        80,
-
-      backgroundColor:
-        '#EAF3E8',
-
-      opacity:
-        0.7,
-
-      transform: [
-        {
-          rotate:
-            '-15deg',
-        },
-      ],
-    },
-
-    /* =====================================================
-       HEADER
-    ===================================================== */
-
-    header: {
-      height:
-        76,
-
-      paddingTop:
-        34,
-
-      paddingHorizontal:
-        18,
-
-      flexDirection:
-        'row',
-
-      alignItems:
-        'center',
-
-      justifyContent:
-        'space-between',
-
-      zIndex:
-        3,
-    },
-
-    headerSide: {
-      width:
-        34,
-
-      height:
-        34,
-    },
-
-    logoRow: {
-      flexDirection:
-        'row',
-
-      alignItems:
-        'center',
-    },
-
-    logoLeaf: {
-      width:
-        23,
-
-      height:
-        23,
-
-      marginRight:
-        5,
-    },
-
-    logoText: {
-      fontSize:
-        17,
-
-      color:
-        '#1F5F3F',
-
-      fontWeight:
-        '900',
-
-      letterSpacing:
-        1.2,
-    },
-
-    scroll: {
-      flex:
-        1,
-    },
-
-    scrollContent: {
-      paddingHorizontal:
-        18,
-
-      paddingBottom:
-        42,
-    },
-
-    /* =====================================================
-       GREEN INSIGHT CARD
-    ===================================================== */
-
-    insightCard: {
-      position:
-        'relative',
-
-      minHeight:
-        214,
-
-      marginTop:
-        4,
-
-      marginBottom:
-        14,
-
-      paddingTop:
-        20,
-
-      paddingHorizontal:
-        20,
-
-      paddingBottom:
-        20,
-
-      backgroundColor:
-        '#2D6A4F',
-
-      borderRadius:
-        18,
-
-      overflow:
-        'hidden',
-
-      shadowColor:
-        '#1A4431',
-
-      shadowOpacity:
-        0.12,
-
-      shadowRadius:
-        12,
-
-      shadowOffset: {
-        width:
-          0,
-
-        height:
-          5,
-      },
-
-      elevation:
-        3,
-    },
-
-    insightCardDecorTop: {
-      position:
-        'absolute',
-
-      width:
-        165,
-
-      height:
-        165,
-
-      borderRadius:
-        55,
-
-      backgroundColor:
-        '#FFFFFF',
-
-      opacity:
-        0.055,
-
-      top:
-        -72,
-
-      right:
-        -62,
-
-      transform: [
-        {
-          rotate:
-            '30deg',
-        },
-      ],
-    },
-
-    insightCardDecorBottom: {
-      position:
-        'absolute',
-
-      width:
-        96,
-
-      height:
-        96,
-
-      borderRadius:
-        36,
-
-      backgroundColor:
-        '#FFFFFF',
-
-      opacity:
-        0.045,
-
-      right:
-        18,
-
-      bottom:
-        -42,
-
-      transform: [
-        {
-          rotate:
-            '30deg',
-        },
-      ],
-    },
-
-    insightGreeting: {
-      fontSize:
-        12,
-
-      color:
-        '#D8E9DF',
-
-      fontWeight:
-        '800',
-
-      marginBottom:
-        1,
-    },
-
-    insightCountRow: {
-      flexDirection:
-        'row',
-
-      alignItems:
-        'flex-end',
-    },
-
-    insightCount: {
-      fontSize:
-        48,
-
-      lineHeight:
-        58,
-
-      color:
-        '#FFFFFF',
-
-      fontWeight:
-        '900',
-
-      letterSpacing:
-        -1,
-    },
-
-    insightCountLabel: {
-      marginLeft:
-        7,
-
-      marginBottom:
-        9,
-
-      fontSize:
-        15,
-
-      color:
-        '#FFFFFF',
-
-      fontWeight:
-        '900',
-    },
-
-    insightSub: {
-      fontSize:
-        12,
-
-      color:
-        '#D8E8DF',
-
-      fontWeight:
-        '700',
-
-      marginBottom:
-        15,
-    },
-
-    insightBottomRow: {
-      flexDirection:
-        'row',
-
-      gap:
-        8,
-
-      alignItems:
-        'center',
-    },
-
-    insightMiniStat: {
-      flex:
-        1,
-
-      minHeight:
-        63,
-
-      borderRadius:
-        12,
-
-      paddingHorizontal:
-        12,
-
-      paddingVertical:
-        10,
-
-      backgroundColor:
-        'rgba(255,255,255,0.12)',
-    },
-
-    insightMiniLabel: {
-      fontSize:
-        11,
-
-      color:
-        '#D8E8DF',
-
-      fontWeight:
-        '700',
-
-      marginBottom:
-        3,
-    },
-
-    insightMiniValue: {
-      fontSize:
-        19,
-
-      color:
-        '#FFFFFF',
-
-      fontWeight:
-        '900',
-    },
-
-    insightArrowBox: {
-      width:
-        52,
-
-      height:
-        63,
-
-      borderRadius:
-        12,
-
-      backgroundColor:
-        'rgba(255,255,255,0.12)',
-
-      alignItems:
-        'center',
-
-      justifyContent:
-        'center',
-    },
-
-    /* =====================================================
-       HEATMAP
-    ===================================================== */
-
-    heatmapCard: {
-      backgroundColor:
-        '#FFFFFF',
-
-      borderRadius:
-        18,
-
-      padding:
-        16,
-
-      marginBottom:
-        14,
-
-      borderWidth:
-        1,
-
-      borderColor:
-        '#F0ECE5',
-
-      shadowColor:
-        '#000',
-
-      shadowOpacity:
-        0.045,
-
-      shadowRadius:
-        10,
-
-      shadowOffset: {
-        width:
-          0,
-
-        height:
-          5,
-      },
-
-      elevation:
-        2,
-    },
-
-    cardHeader: {
-      flexDirection:
-        'row',
-
-      alignItems:
-        'flex-start',
-
-      justifyContent:
-        'space-between',
-
-      marginBottom:
-        12,
-    },
-
-    cardTitle: {
-      fontSize:
-        17,
-
-      fontWeight:
-        '900',
-
-      color:
-        '#111827',
-    },
-
-    heatmapSubtitle: {
-      marginTop:
-        4,
-
-      fontSize:
-        11,
-
-      color:
-        '#9CA3AF',
-
-      fontWeight:
-        '700',
-    },
-
-    viewAllText: {
-      fontSize:
-        12,
-
-      color:
-        '#1F7A4D',
-
-      fontWeight:
-        '800',
-    },
-
-    /*
-     * 날짜 범위
-     *
-     * 가운데 정렬
-     *
-     * ex)
-     * 8/1 - 8/28
-     */
-    heatmapDateText: {
-      width:
-        '100%',
-
-      textAlign:
-        'center',
-
-      fontSize:
-        11,
-
-      color:
-        '#6B7280',
-
-      fontWeight:
-        '900',
-
-      marginBottom:
-        10,
-    },
-
-    /* 4줄 */
-
-    heatmapGrid: {
-      gap:
-        7,
-    },
-
-    /* 7개 */
-
-    heatmapRow: {
-      flexDirection:
-        'row',
-
-      gap:
-        7,
-    },
-
-    /*
-     * 카드 너비에 맞춰
-     * 동일 크기로 7개
-     */
-    heatCell: {
-      flex:
-        1,
-
-      height:
-        25,
-
-      borderRadius:
-        6,
-    },
-
-    /* 적음 ~ 많음 */
-
-    legendRow: {
-      marginTop:
-        13,
-
-      flexDirection:
-        'row',
-
-      justifyContent:
-        'flex-end',
-
-      alignItems:
-        'center',
-
-      gap:
-        7,
-    },
-
-    legendText: {
-      fontSize:
-        11,
-
-      color:
-        '#6B7280',
-
-      fontWeight:
-        '700',
-    },
-
-    legendCells: {
-      flexDirection:
-        'row',
-
-      gap:
-        4,
-    },
-
-    legendCell: {
-      width:
-        14,
-
-      height:
-        8,
-
-      borderRadius:
-        2,
-    },
-
-    /* =====================================================
-       CATEGORY
-    ===================================================== */
-
-    categoryCard: {
-      backgroundColor:
-        '#FFFFFF',
-
-      borderRadius:
-        18,
-
-      padding:
-        17,
-
-      marginBottom:
-        14,
-
-      borderWidth:
-        1,
-
-      borderColor:
-        '#F0ECE5',
-
-      shadowColor:
-        '#000',
-
-      shadowOpacity:
-        0.045,
-
-      shadowRadius:
-        10,
-
-      shadowOffset: {
-        width:
-          0,
-
-        height:
-          5,
-      },
-
-      elevation:
-        2,
-    },
-
-    categoryTitle: {
-      fontSize:
-        17,
-
-      fontWeight:
-        '900',
-
-      color:
-        '#111827',
-    },
-
-    categorySubtitle: {
-      marginTop:
-        4,
-
-      marginBottom:
-        14,
-
-      fontSize:
-        11,
-
-      color:
-        '#8B8B84',
-
-      fontWeight:
-        '700',
-    },
-
-    categoryStackBar: {
-      height:
-        12,
-
-      flexDirection:
-        'row',
-
-      borderRadius:
-        999,
-
-      overflow:
-        'hidden',
-
-      marginBottom:
-        14,
-    },
-
-    categoryStackPart: {
-      height:
-        '100%',
-    },
-
-    categoryLegendGrid: {
-      flexDirection:
-        'row',
-
-      flexWrap:
-        'wrap',
-
-      justifyContent:
-        'space-between',
-
-      rowGap:
-        10,
-    },
-
-    categoryLegendItem: {
-      width:
-        '48%',
-
-      flexDirection:
-        'row',
-
-      alignItems:
-        'center',
-
-      justifyContent:
-        'space-between',
-    },
-
-    categoryLegendLeft: {
-      flex:
-        1,
-
-      flexDirection:
-        'row',
-
-      alignItems:
-        'center',
-    },
-
-    categoryDot: {
-      width:
-        9,
-
-      height:
-        9,
-
-      borderRadius:
-        999,
-
-      marginRight:
-        7,
-    },
-
-    categoryLegendName: {
-      flex:
-        1,
-
-      fontSize:
-        11,
-
-      color:
-        '#5F5F59',
-
-      fontWeight:
-        '800',
-    },
-
-    categoryLegendPercent: {
-      marginLeft:
-        6,
-
-      fontSize:
-        11,
-
-      color:
-        '#4B4B46',
-
-      fontWeight:
-        '900',
-    },
-
-    /* =====================================================
-       RECENT
-    ===================================================== */
-
-    recentCard: {
-      backgroundColor:
-        '#FFFFFF',
-
-      borderRadius:
-        18,
-
-      padding:
-        18,
-
-      marginBottom:
-        14,
-
-      borderWidth:
-        1,
-
-      borderColor:
-        '#F0ECE5',
-
-      shadowColor:
-        '#000',
-
-      shadowOpacity:
-        0.045,
-
-      shadowRadius:
-        10,
-
-      shadowOffset: {
-        width:
-          0,
-
-        height:
-          5,
-      },
-
-      elevation:
-        2,
-    },
-
-    sectionHeader: {
-      flexDirection:
-        'row',
-
-      alignItems:
-        'center',
-
-      justifyContent:
-        'space-between',
-    },
-
-    recentTitle: {
-      fontSize:
-        16,
-
-      fontWeight:
-        '900',
-
-      color:
-        '#6B7280',
-
-      marginBottom:
-        15,
-    },
-
-    recentItem: {
-      paddingVertical:
-        14,
-    },
-
-    recentDivider: {
-      borderBottomWidth:
-        1,
-
-      borderBottomColor:
-        '#ECE8DF',
-    },
-
-    recentQuestion: {
-      fontSize:
-        16,
-
-      color:
-        '#111827',
-
-      fontWeight:
-        '900',
-
-      lineHeight:
-        22,
-
-      marginBottom:
-        8,
-    },
-
-    recentAnswer: {
-      fontSize:
-        14,
-
-      color:
-        '#6B7280',
-
-      fontWeight:
-        '600',
-
-      lineHeight:
-        21,
-
-      marginBottom:
-        9,
-    },
-
-    recentMetaRow: {
-      flexDirection:
-        'row',
-
-      alignItems:
-        'center',
-    },
-
-    sourceBadge: {
-      backgroundColor:
-        '#F7F7F4',
-
-      borderWidth:
-        1,
-
-      borderColor:
-        '#E8E3DA',
-
-      borderRadius:
-        999,
-
-      paddingHorizontal:
-        11,
-
-      paddingVertical:
-        4,
-
-      marginRight:
-        7,
-    },
-
-    sourceBadgeText: {
-      fontSize:
-        12,
-
-      color:
-        '#6B7280',
-
-      fontWeight:
-        '900',
-    },
-
-    categoryBadge: {
-      borderWidth:
-        1,
-
-      borderRadius:
-        999,
-
-      paddingHorizontal:
-        11,
-
-      paddingVertical:
-        4,
-    },
-
-    categoryBadgeText: {
-      fontSize:
-        12,
-
-      fontWeight:
-        '900',
-    },
-
-    dateText: {
-      marginLeft:
-        'auto',
-
-      fontSize:
-        14,
-
-      color:
-        '#9CA3AF',
-
-      fontWeight:
-        '800',
-    },
-
-    emptySmallText: {
-      fontSize:
-        13,
-
-      color:
-        '#9CA3AF',
-
-      fontWeight:
-        '700',
-
-      lineHeight:
-        20,
-    },
-  });
+function ReviewEmpty({ completed }: { completed: boolean }) {
+  return (
+    <View style={styles.emptyReviewCard}>
+      <View style={styles.emptySymbol}>
+        {completed ? <Ionicons name="checkmark" size={34} color={C.forest} /> : <Text style={styles.coffee}>☕</Text>}
+      </View>
+      <Text style={styles.emptyTitle}>
+        {completed ? '오늘 복습을 모두 완료했어요' : '오늘은 복습할 게 없어요'}
+      </Text>
+      <Text style={styles.emptyDescription}>
+        {completed
+          ? '다음 복습은 내일 확인해 보세요.\n그 사이 새로운 인사이트를 쌓아보세요.'
+          : '저장한 지 며칠 지난 인사이트가 생기면\n복습 알림으로 알려드려요.'}
+      </Text>
+    </View>
+  );
+}
+
+function ReviewCard({
+  review, choice, remaining, submitting, error, onChoose, onNext,
+}: {
+  review: ReviewItem;
+  choice?: ReviewChoice;
+  remaining: number;
+  submitting: boolean;
+  error: string;
+  onChoose: (choice: ReviewChoice) => void;
+  onNext: () => void;
+}) {
+  const choices: { id: ReviewChoice; label: string; sub: string }[] = [
+    { id: 'forgot', label: '전혀 기억 안 남', sub: '내일 다시' },
+    { id: 'unsure', label: '헷갈림', sub: '2일 뒤 다시' },
+    { id: 'remember', label: '기억남', sub: '다시 알리지 않음' },
+  ];
+  return (
+    <View style={styles.reviewCard}>
+      <View style={styles.reviewMetaRow}>
+        <View style={styles.categoryPill}><Text style={styles.categoryPillText}>{review.category}</Text></View>
+        <Text style={styles.savedLabel}>{review.savedLabel}</Text>
+      </View>
+      <Text style={styles.reviewQuestion}>{review.question}</Text>
+      <View style={styles.optionsRow}>
+        {choices.map((item) => (
+          <View key={item.id} style={styles.optionWrapper}>
+            <Pressable
+              onPress={() => onChoose(item.id)}
+              disabled={submitting || Boolean(choice)}
+              accessibilityRole="button"
+              accessibilityLabel={item.label}
+              style={[styles.optionButton, choice === item.id && styles.optionButtonActive]}
+            >
+              <Text style={[styles.optionText, choice === item.id && styles.optionTextActive]}>
+                {item.label}
+              </Text>
+            </Pressable>
+            <Text style={[styles.optionSub, choice === item.id && styles.optionSubActive]}>{item.sub}</Text>
+          </View>
+        ))}
+      </View>
+      {submitting ? <ActivityIndicator size="small" color={C.forest} style={{ marginTop: 12 }} /> : null}
+      {error ? <Text style={styles.errorText}>{error}</Text> : null}
+      {choice ? (
+        <>
+          {choice !== 'remember' && (
+            <View style={styles.bulletBox}>
+              <Text style={styles.bulletTitle}>📝 개조식 요약</Text>
+              {(review.bullets.length ? review.bullets : ['이전 기록에는 개조식 요약이 없습니다.']).map((line, i) => (
+                <Text key={`${i}-${line}`} style={styles.bulletText}>•  {line}</Text>
+              ))}
+            </View>
+          )}
+          <Text style={styles.schedulingNote}>
+            {choice === 'forgot'
+              ? '🔔 내일 다시 볼 항목으로 저장했어요'
+              : choice === 'unsure'
+              ? '🔔 2일 뒤 다시 볼 항목으로 저장했어요'
+              : '✅ 이 인사이트의 복습이 종료됐어요'}
+          </Text>
+          <Pressable style={styles.nextReviewButton} onPress={onNext} accessibilityRole="button">
+            <Text style={styles.nextReviewButtonText}>
+              {remaining > 1 ? `다음 복습 (${remaining - 1}개 남음) →` : '오늘 복습 완료 보기 →'}
+            </Text>
+          </Pressable>
+
+        </>
+      ) : null}
+    </View>
+  );
+}
+
+export default function HomeScreen() {
+  const [username, setUsername] = useState('사용자');
+  const [streak, setStreak] = useState(0);
+  const [categories, setCategories] = useState<CategoryItem[]>([]);
+  const [recent, setRecent] = useState<RecentInsight[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState('');
+
+  const [reviewItems, setReviewItems] = useState<ReviewItem[]>([]);
+  const [reviewProgress, setReviewProgress] = useState<ReviewProgress>({ completed: 0, total: 0 });
+  const [reviewState, setReviewState] = useState<ReviewState>('empty');
+  const [reviewLoading, setReviewLoading] = useState(true);
+  const [reviewError, setReviewError] = useState('');
+  const [selectedChoice, setSelectedChoice] = useState<ReviewChoice | undefined>();
+  const [submitting, setSubmitting] = useState(false);
+  const submittingLock = useRef(false);
+
+  // 로그인 직후뿐 아니라 기존 로그인 세션으로 홈에 진입한 경우에도
+  // 기존 푸시 토큰 등록 로직을 사용합니다. 웹에서는 아무 작업도 하지 않습니다.
+  useEffect(() => {
+    if (Platform.OS !== 'web') void registerPushNotifications();
+  }, []);
+
+  const fetchHome = useCallback(async () => {
+    try {
+      setLoading(true);
+      setLoadError('');
+      const data: any = await homeApi.getHome();
+      const greeting: string = typeof data?.greeting === 'string' ? data.greeting : '';
+      const nameFromGreeting = greeting.match(/^(.+?)님[,\s]/)?.[1];
+      setUsername(data?.username || data?.name || data?.user?.username || data?.user?.name || nameFromGreeting || '사용자');
+
+      const rawCategories = Array.isArray(data?.category_distribution) ? data.category_distribution : [];
+      setCategories(rawCategories.map((item: any, index: number) => ({
+        name: String(item?.name || '기타'),
+        percentage: Number(item?.percent ?? 0),
+        color: categoryColor(String(item?.name || '기타'), index),
+      })).filter((item: CategoryItem) => item.percentage > 0)
+         .sort((a: CategoryItem, b: CategoryItem) => b.percentage - a.percentage).slice(0, 4));
+
+      const rawRecent = Array.isArray(data?.recent_insights) ? data.recent_insights : [];
+      setRecent(rawRecent.slice(0, 2).map((item: any) => ({
+        id: typeof item?.id === 'number' ? item.id : null,
+        question: item?.question_summary || item?.question_original || '저장된 인사이트',
+        bullets: summaryBullets(item?.answer_summary || item?.answer_original || item?.answer),
+      })));
+    } catch (error: any) {
+      setLoadError(error?.message || '홈 데이터를 불러오지 못했어요.');
+      setCategories([]);
+      setRecent([]);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  const fetchReviewQueue = useCallback(async (showLoader = true) => {
+    if (showLoader) setReviewLoading(true);
+    try {
+      setReviewError('');
+      const data: any = await apiCall('GET', '/api/home/review_queue');
+      const rawItems = Array.isArray(data?.items) ? data.items : [];
+      const progress = data?.progress;
+      setReviewItems(rawItems.map((item: any) => ({
+        id: Number(item.id),
+        question: item?.question_summary || item?.question_original || '저장된 질문',
+        category: item?.category_name || '기타',
+        savedLabel: formatSavedLabel(item?.created_at),
+        bullets: toBulletList(item?.bullet_summary),
+      })).filter((item: ReviewItem) => Number.isInteger(item.id) && item.id > 0));
+      setReviewProgress({
+        completed: Math.max(0, Number(progress?.completed || 0)),
+        total: Math.max(0, Number(progress?.total || 0)),
+      });
+      setReviewState(data?.state === 'complete' ? 'complete' : data?.state === 'in_progress' ? 'in_progress' : 'empty');
+      setStreak(Math.max(0, Number(data?.current_streak || 0)));
+      setSelectedChoice(undefined);
+    } catch (error: any) {
+      setReviewError(error?.message || '복습 목록을 불러오지 못했어요.');
+      if (showLoader) {
+        setReviewItems([]);
+        setReviewProgress({ completed: 0, total: 0 });
+      }
+    } finally {
+      if (showLoader) setReviewLoading(false);
+    }
+  }, []);
+
+  useFocusEffect(useCallback(() => {
+    void fetchHome();
+    void fetchReviewQueue();
+  }, [fetchHome, fetchReviewQueue]));
+
+  const activeReview = reviewItems[0] ?? null;
+  const remaining = reviewItems.length;
+
+  // 복습 결과 버튼을 누르면 즉시 서버에 저장합니다.
+  // 성공해야 선택 상태와 진행률을 바꿔, 중복 제출이나 가짜 진행을 방지합니다.
+  const submitReview = async (choice: ReviewChoice) => {
+    if (!activeReview || selectedChoice || submittingLock.current) return;
+    submittingLock.current = true;
+    setSubmitting(true);
+    setReviewError('');
+    try {
+      const result: any = await apiCall('POST', `/api/insights/${activeReview.id}/review`, {
+        body: { outcome: OUTCOME_BY_CHOICE[choice] },
+      });
+      // 다음 버튼을 누르기 전까지는 현재 카드를 그대로 보여 줍니다.
+      setSelectedChoice(choice);
+      setReviewProgress((previous) => ({
+        ...previous,
+        completed: Math.min(previous.total, previous.completed + 1),
+      }));
+      if (Number.isFinite(Number(result?.current_streak))) {
+        setStreak(Math.max(0, Number(result.current_streak)));
+      }
+    } catch (error: any) {
+      setReviewError(error?.message || '복습 결과 저장에 실패했어요. 다시 시도해 주세요.');
+    } finally {
+      submittingLock.current = false;
+      setSubmitting(false);
+    }
+  };
+
+  const goNext = () => {
+    if (!selectedChoice || submittingLock.current) return;
+    // 기록은 이미 서버에 저장되었으므로, 큐를 다시 읽어 다음 항목을 보여 줍니다.
+    setSelectedChoice(undefined);
+    void fetchReviewQueue();
+  };
+
+  const categoriesTotal = categories.reduce((sum, c) => sum + c.percentage, 0);
+
+  return (
+    <SafeAreaView style={styles.screen} edges={['top']}>
+      {/* 탐색 화면과 동일한 모바일 폭/중앙 정렬 레이아웃 */}
+      <View style={styles.outer}>
+        <View style={styles.phone}>
+          <View style={styles.brandHeader}>
+            <Image source={logoLeaf} style={styles.brandLeaf} resizeMode="contain" />
+            <Text style={styles.brandWord}>FLOW</Text>
+          </View>
+          <ScrollView
+            style={styles.scroll}
+            contentContainerStyle={styles.content}
+            showsVerticalScrollIndicator={false}
+          >
+        <View style={styles.introRow}>
+          <View style={styles.introCopy}>
+            <Text style={styles.greeting} numberOfLines={1}>안녕하세요, {username}님 👋</Text>
+            <Text style={styles.introCaption}>오늘도 배운 걸 내 것으로 만들어봐요</Text>
+          </View>
+          {streak > 0 ? <View style={styles.streakPill}><Text style={styles.streakText}>🔥 {streak}일 연속</Text></View> : null}
+        </View>
+
+        {!reviewLoading && !(reviewError && reviewItems.length === 0) ? (
+          <ProgressCard completed={reviewProgress.completed} total={reviewProgress.total} />
+        ) : null}
+
+        {reviewLoading ? (
+          <View style={styles.emptyReviewCard}><ActivityIndicator color={C.forest} /></View>
+        ) : reviewError && reviewItems.length === 0 ? (
+          <View style={styles.emptyReviewCard}>
+            <Text style={styles.emptyTitle}>복습 목록을 불러오지 못했어요</Text>
+            <Text style={styles.errorText}>{reviewError}</Text>
+            <Pressable onPress={() => { void fetchReviewQueue(); }}><Text style={styles.viewAll}>다시 시도 →</Text></Pressable>
+          </View>
+        ) : activeReview ? (
+          <ReviewCard
+            review={activeReview}
+            choice={selectedChoice}
+            remaining={remaining}
+            submitting={submitting}
+            error={reviewError}
+            onChoose={(choice) => { void submitReview(choice); }}
+            onNext={goNext}
+          />
+        ) : (
+          <ReviewEmpty completed={reviewState === 'complete'} />
+        )}
+
+        <View style={styles.sectionCard}>
+          <View style={styles.sectionTitleRow}>
+            <Text style={styles.sectionTitle}>무엇을 공부했나요</Text>
+            <Text style={styles.sectionHint}>전체 기록</Text>
+          </View>
+          {categories.length > 0 && categoriesTotal > 0 ? (
+            <>
+              <View style={styles.segmentBar}>
+                {categories.map((item) => (
+                  <View key={item.name} style={{ flex: item.percentage, backgroundColor: item.color }} />
+                ))}
+              </View>
+              <View style={styles.legendWrap}>
+                {categories.map((item) => (
+                  <View key={item.name} style={styles.legendItem}>
+                    <View style={[styles.legendDot, { backgroundColor: item.color }]} />
+                    <Text style={styles.legendLabel}>{item.name} {Math.round(item.percentage)}%</Text>
+                  </View>
+                ))}
+              </View>
+            </>
+          ) : (
+            <Text style={styles.noDataText}>아직 저장된 주제 통계가 없어요.</Text>
+          )}
+        </View>
+
+        <View style={styles.recentHeader}>
+          <Text style={styles.recentTitle}>최근 인사이트</Text>
+          <Pressable onPress={() => router.push('/recent')} hitSlop={8} accessibilityRole="button">
+            <Text style={styles.viewAll}>전체 보기 →</Text>
+          </Pressable>
+        </View>
+        {recent.length ? recent.map((item, idx) => (
+          <View key={item.id == null ? `recent-${idx}` : String(item.id)} style={styles.recentCard}>
+            <View style={styles.recentHeadingRow}>
+              <Text style={styles.recentQuestion} numberOfLines={2}>{item.question}</Text>
+            </View>
+            {(item.bullets.length ? item.bullets.slice(0, 2) : ['개조식 요약이 없는 이전 인사이트입니다.']).map((bullet, i) => (
+              <View style={styles.recentBulletRow} key={`${i}-${bullet}`}>
+                <Text style={styles.recentBulletSymbol}>•</Text>
+                <Text style={styles.recentBulletText} numberOfLines={2}>{bullet}</Text>
+              </View>
+            ))}
+          </View>
+        )) : (
+          <View style={styles.recentCard}>
+            <Text style={styles.noDataText}>최근 인사이트가 없어요. 아래 + 버튼으로 추가해 보세요.</Text>
+          </View>
+        )}
+
+        {loadError ? <Text style={styles.errorText}>{loadError}</Text> : null}
+        {loading ? <ActivityIndicator size="small" color={C.forest} style={{ marginVertical: 8 }} /> : null}
+          </ScrollView>
+        </View>
+      </View>
+    </SafeAreaView>
+  );
+}
+
+const styles = StyleSheet.create({
+  screen: { flex: 1, backgroundColor: '#EAE5DA' },
+  outer: { flex: 1, alignItems: 'center', backgroundColor: '#EAE5DA' },
+  phone: {
+    width: '100%',
+    maxWidth: 360, // app/(tabs)/explore.tsx 의 phone과 동일
+    flex: 1,
+    backgroundColor: C.bg,
+  },
+  brandHeader: { height: 53, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: C.bg },
+  brandLeaf: { width: 22, height: 22 },
+  brandWord: { color: C.forest, fontSize: 17, fontWeight: '900', letterSpacing: 3.0 },
+  scroll: { flex: 1 },
+  content: { paddingHorizontal: 18, paddingTop: 7, paddingBottom: 36 },
+  introRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 },
+  introCopy: { flex: 1, minWidth: 0, paddingRight: 6 },
+  greeting: { fontSize: 20, color: C.ink, fontWeight: '900', letterSpacing: -0.8 },
+  introCaption: { fontSize: 11.5, color: C.muted, marginTop: 4, fontWeight: '500' },
+  streakPill: { backgroundColor: '#E8F1E8', borderRadius: 999, paddingHorizontal: 9, paddingVertical: 6 },
+  streakText: { fontSize: 10, fontWeight: '800', color: C.forest },
+  progressCard: { minHeight: 120, borderRadius: 23, backgroundColor: C.forest, padding: 19, overflow: 'hidden', marginBottom: 14 },
+  decorCircle: { position: 'absolute', width: 170, height: 170, borderRadius: 100, right: -38, top: -56, backgroundColor: 'rgba(255,255,255,0.065)' },
+  progressHeadingRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  progressEyebrow: { color: '#B9D3C4', fontSize: 12, fontWeight: '600' },
+  progressCountRow: { flexDirection: 'row', alignItems: 'baseline', gap: 7, marginTop: 9, marginBottom: 10 },
+  progressCount: { color: '#FFFFFF', fontSize: 36, fontWeight: '900', letterSpacing: -1.4 },
+  progressCountSmall: { color: '#FFFFFF', fontSize: 13, fontWeight: '800' },
+  progressTrack: { width: '100%', height: 8, backgroundColor: '#598D73', borderRadius: 99, overflow: 'hidden' },
+  progressFill: { height: 8, backgroundColor: '#FFFFFF', borderRadius: 99 },
+  progressDone: { color: '#D8EDE0', fontWeight: '800', marginTop: 11, fontSize: 12 },
+  noReviewLarge: { color: '#FFFFFF', fontSize: 22, fontWeight: '900', marginTop: 15 },
+  noReviewCaption: { color: '#D8E9DE', fontSize: 12, marginTop: 9 },
+  reviewCard: { backgroundColor: C.paper, borderColor: C.forest, borderWidth: 1.2, borderRadius: 22, paddingHorizontal: 16, paddingTop: 15, paddingBottom: 15, marginBottom: 14 },
+  reviewMetaRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  categoryPill: { backgroundColor: C.forest, paddingHorizontal: 10, paddingVertical: 5, borderRadius: 99 },
+  categoryPillText: { color: 'white', fontSize: 11, fontWeight: '800' },
+  savedLabel: { color: C.muted, fontSize: 11 },
+  reviewQuestion: { color: C.ink, fontWeight: '900', fontSize: 16.5, marginTop: 12, marginBottom: 15, lineHeight: 24 },
+  optionsRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 6 },
+  optionWrapper: { flex: 1 },
+  optionButton: { minHeight: 44, borderRadius: 13, borderWidth: 1, borderColor: C.line, backgroundColor: C.paper, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 3 },
+  optionButtonActive: { backgroundColor: C.forest, borderColor: C.forest },
+  optionText: { fontSize: 11.2, fontWeight: '900', color: C.ink, textAlign: 'center' },
+  optionTextActive: { color: C.paper },
+  optionSub: { textAlign: 'center', color: C.muted, fontSize: 10, marginTop: 7 },
+  optionSubActive: { color: C.forest, fontWeight: '900' },
+  bulletBox: { backgroundColor: '#E9F1E9', borderRadius: 14, marginTop: 18, paddingHorizontal: 13, paddingTop: 12, paddingBottom: 10 },
+  bulletTitle: { fontSize: 12.2, fontWeight: '900', color: C.forest, marginBottom: 9 },
+  bulletText: { fontSize: 12, lineHeight: 19, color: '#383E39', marginBottom: 3 },
+  schedulingNote: { textAlign: 'center', fontSize: 11.5, color: C.forest, fontWeight: '800', marginTop: 14, marginBottom: 11 },
+  nextReviewButton: { height: 46, backgroundColor: C.forest, borderRadius: 13, alignItems: 'center', justifyContent: 'center' },
+  nextReviewButtonText: { fontSize: 13, color: C.paper, fontWeight: '900' },
+  localNote: { textAlign: 'center', fontSize: 9.4, color: C.muted, lineHeight: 15, marginTop: 8 },
+  emptyReviewCard: { minHeight: 188, backgroundColor: C.paper, borderWidth: 1, borderColor: C.line, borderRadius: 23, paddingHorizontal: 18, justifyContent: 'center', alignItems: 'center', marginBottom: 14 },
+  emptySymbol: { width: 67, height: 67, backgroundColor: '#E8F1E9', borderRadius: 99, alignItems: 'center', justifyContent: 'center', marginBottom: 18 },
+  coffee: { fontSize: 26 },
+  emptyTitle: { fontSize: 19, fontWeight: '900', color: C.ink, marginBottom: 8, textAlign: 'center' },
+  emptyDescription: { fontSize: 12, lineHeight: 19, textAlign: 'center', color: C.muted },
+  sectionCard: { backgroundColor: C.paper, borderColor: C.line, borderWidth: 1, borderRadius: 21, padding: 16, marginBottom: 15 },
+  sectionTitleRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 },
+  sectionTitle: { color: C.ink, fontSize: 17, fontWeight: '900', letterSpacing: -0.5 },
+  sectionHint: { color: C.muted, fontSize: 11 },
+  segmentBar: { flexDirection: 'row', width: '100%', height: 11, borderRadius: 8, overflow: 'hidden' },
+  legendWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: 12, marginTop: 15 },
+  legendItem: { flexDirection: 'row', alignItems: 'center', gap: 5 },
+  legendDot: { width: 9, height: 9, borderRadius: 99 },
+  legendLabel: { fontSize: 10.8, color: '#525A54', fontWeight: '600' },
+  recentHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 1, marginBottom: 11, paddingHorizontal: 2 },
+  recentTitle: { fontSize: 17, fontWeight: '900', color: C.ink },
+  viewAll: { color: C.forest, fontSize: 11.5, fontWeight: '800' },
+  recentCard: { backgroundColor: C.paper, borderColor: C.line, borderWidth: 1, borderRadius: 20, padding: 16, marginBottom: 12 },
+  recentHeadingRow: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 9, gap: 6 },
+  recentQuestion: { flex: 1, fontSize: 14, lineHeight: 20, fontWeight: '900', color: C.ink },
+  editArea: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingVertical: 3 },
+  editText: { fontSize: 11, color: C.muted },
+  recentBulletRow: { flexDirection: 'row', marginVertical: 2, paddingRight: 4 },
+  recentBulletSymbol: { color: C.forest, fontSize: 13, fontWeight: '900', width: 15 },
+  recentBulletText: { flex: 1, color: '#5A635C', fontSize: 11.8, lineHeight: 18 },
+  noDataText: { color: C.muted, fontSize: 12, lineHeight: 20 },
+  errorText: { marginTop: 8, fontSize: 11, color: '#BE5262', textAlign: 'center' },
+});

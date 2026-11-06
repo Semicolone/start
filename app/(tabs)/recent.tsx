@@ -11,7 +11,7 @@ import {
     Text,
     View,
 } from 'react-native';
-import { categoryApi, homeApi, insightApi } from '../../lib/client';
+import apiCall, { categoryApi, insightApi } from '../../lib/client';
 
 const chatgptMark = require('../../assets/images/chatgpt-mark.png');
 const claudeMark = require('../../assets/images/claude-mark.png');
@@ -187,23 +187,14 @@ export default function RecentScreen() {
       setLoading(true);
       setErrorMessage('');
 
-      let data: any = null;
-
-      try {
-        data = await homeApi.getRecentInsights();
-      } catch {
-        data = await homeApi.getHome();
-      }
-
-      const list =
-        data?.recent_insights ||
-        data?.insights ||
-        data?.items ||
-        [];
-
-      setItems(Array.isArray(list) ? list.map(mapInsight) : []);
-    } catch (error) {
-      console.log('최근 질문 목록 불러오기 실패:', error);
+      // 홈의 최근 3개 API 대신 서버의 최신순 전체 목록 API 사용
+      // GET /api/insights -> { insights: [...], total: number }
+      const data = await apiCall('GET', '/api/insights');
+      const list = Array.isArray(data?.insights) ? data.insights : [];
+      setItems(list.map(mapInsight));
+    } catch (error: any) {
+      console.log('인사이트 전체 목록 불러오기 실패:', error);
+      setErrorMessage(error?.message || '인사이트 전체 목록을 불러오지 못했어요.');
       setItems([]);
     } finally {
       setLoading(false);
@@ -365,7 +356,7 @@ export default function RecentScreen() {
             <Ionicons name="arrow-back" size={25} color="#1F5F3F" />
           </Pressable>
 
-          <Text style={styles.headerTitle}>최근 질문 전체보기</Text>
+          <Text style={styles.headerTitle}>인사이트 전체보기</Text>
 
           <View style={styles.headerRight} />
         </View>
@@ -376,7 +367,7 @@ export default function RecentScreen() {
           showsVerticalScrollIndicator={false}
         >
           <Text style={styles.countText}>
-            전체 <Text style={styles.countStrong}>{items.length}개</Text>의 질문이 있어요
+            전체 <Text style={styles.countStrong}>{items.length}개</Text>의 인사이트가 있어요
           </Text>
 
           {errorMessage ? (
@@ -425,6 +416,26 @@ export default function RecentScreen() {
                     </View>
 
                     <View style={styles.cardActionRow}>
+                      {/* 홈에서는 수정 버튼을 숨기고, 전체목록 카드에서만 수정 */}
+                      <Pressable
+                        style={styles.listEditButton}
+                        accessibilityRole="button"
+                        accessibilityLabel="인사이트 수정"
+                        onPress={() => {
+                          setMenuTargetId(null);
+                          setMenuTarget(null);
+                          if (item.id != null) {
+                            router.push({
+                              pathname: '/insight-edit',
+                              params: { id: String(item.id) },
+                            } as any);
+                          }
+                        }}
+                      >
+                        <Ionicons name="pencil-outline" size={14} color="#1F6B45" />
+                        <Text style={styles.listEditButtonText}>수정</Text>
+                      </Pressable>
+
                       <Pressable
                         style={styles.moreButton}
                         onPress={() => toggleMenu(item)}
@@ -466,6 +477,7 @@ export default function RecentScreen() {
 
                           <Text style={styles.inlineMenuText}>자세히 보기</Text>
                         </Pressable>
+
                       </View>
                     ) : null}
                   </View>
@@ -484,11 +496,14 @@ export default function RecentScreen() {
                     <Text style={styles.dateText}>{item.date}</Text>
 
                     <View style={styles.keywordRow}>
-                      {item.keywords.slice(0, 3).map((keyword, index) => (
+                      {item.keywords.slice(0, 2).map((keyword, index) => (
                         <View key={`${keyword}-${index}`} style={styles.keywordChip}>
-                          <Text style={styles.keywordText}>#{keyword}</Text>
+                          <Text style={styles.keywordText} numberOfLines={1} ellipsizeMode="tail">#{keyword}</Text>
                         </View>
                       ))}
+                      {item.keywords.length > 2 ? (
+                        <Text style={styles.extraKeywordsText}>+{item.keywords.length - 2}</Text>
+                      ) : null}
                     </View>
                   </View>
                 </View>
@@ -569,7 +584,7 @@ export default function RecentScreen() {
                   {detailTarget?.keywords && detailTarget.keywords.length > 0 ? (
                     detailTarget.keywords.map((keyword, index) => (
                       <View key={`${keyword}-${index}`} style={styles.detailKeywordChip}>
-                        <Text style={styles.detailKeywordText}>#{keyword}</Text>
+                        <Text style={styles.detailKeywordText} numberOfLines={1} ellipsizeMode="tail">#{keyword}</Text>
                       </View>
                     ))
                   ) : (
@@ -778,6 +793,17 @@ const styles = StyleSheet.create({
     gap: 6,
   },
 
+  listEditButton: {
+    height: 34,
+    borderRadius: 10,
+    paddingHorizontal: 9,
+    backgroundColor: '#EAF4EA',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 4,
+  },
+  listEditButtonText: { fontSize: 12, color: '#1F6B45', fontWeight: '800' },
   moreButton: {
     width: 34,
     height: 34,
@@ -855,6 +881,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     paddingRight: 2,
+    minWidth: 0,
   },
 
   dateText: {
@@ -870,6 +897,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 6,
     flexShrink: 1,
+    flex: 1,
+    minWidth: 0,
+    overflow: 'hidden',
   },
 
   keywordChip: {
@@ -877,12 +907,19 @@ const styles = StyleSheet.create({
     borderRadius: 999,
     paddingHorizontal: 9,
     paddingVertical: 4,
+    minWidth: 0,
+    maxWidth: '100%',
+    flexShrink: 1,
+    overflow: 'hidden',
   },
 
+  extraKeywordsText: { fontSize: 11, color: '#718179', fontWeight: '800', flexShrink: 0 },
   keywordText: {
     fontSize: 12,
     color: '#1F6B45',
     fontWeight: '800',
+    minWidth: 0,
+    flexShrink: 1,
   },
 
   modalOverlay: {
@@ -1037,12 +1074,16 @@ const styles = StyleSheet.create({
     borderRadius: 999,
     paddingHorizontal: 10,
     paddingVertical: 6,
+    maxWidth: '100%',
+    minWidth: 0,
   },
 
   detailKeywordText: {
     fontSize: 12,
     color: '#1F6B45',
     fontWeight: '900',
+    flexShrink: 1,
+    minWidth: 0,
   },
 
   detailEmptyText: {

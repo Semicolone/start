@@ -31,6 +31,7 @@ const CATEGORY_OPTIONS = [
 type AnalysisResult = {
   question_summary: string;
   answer_summary: string;
+  bullet_summary: string[];
   keywords: string[];
 };
 
@@ -46,6 +47,11 @@ function normalizeAnalysisResult(data: any): AnalysisResult {
       data?.answerSummary ||
       data?.summary_answer ||
       '답변 요약이 생성되었습니다.',
+    bullet_summary: Array.isArray(data?.bullet_summary)
+      ? data.bullet_summary.filter((entry: unknown): entry is string =>
+          typeof entry === 'string' && entry.trim().length > 0
+        )
+      : [],
     keywords: Array.isArray(data?.keywords) ? data.keywords : [],
   };
 }
@@ -79,6 +85,7 @@ export default function AddScreen() {
         result = {
           question_summary: question.trim().slice(0, 45) || '질문 요약',
           answer_summary: answer.trim().slice(0, 90) || '답변 요약',
+          bullet_summary: ['핵심 내용을 짧게 정리합니다.'],
           keywords: ['AI', '인사이트', selectedCategory],
         };
       } else {
@@ -119,6 +126,7 @@ export default function AddScreen() {
         answer_original: answer.trim(),
         question_summary: analysisResult.question_summary,
         answer_summary: analysisResult.answer_summary,
+        bullet_summary: analysisResult.bullet_summary,
         keywords: analysisResult.keywords,
         saved_from: 'mobile',
       });
@@ -318,6 +326,26 @@ export default function AddScreen() {
                     {analysisResult?.answer_summary}
                   </Text>
 
+                  {/* 기존 문장 요약 바로 아래에 개조식 요약만 추가 */}
+                  <View style={styles.bulletResultBox}>
+                    <View style={styles.bulletResultHeading}>
+                      <Ionicons name="list-outline" size={18} color="#1F6B45" />
+                      <Text style={styles.bulletResultTitle}>개조식 요약</Text>
+                    </View>
+                    {analysisResult?.bullet_summary?.length ? (
+                      analysisResult.bullet_summary.map((entry, index) => (
+                        <View key={`${index}-${entry}`} style={styles.bulletResultLine}>
+                          <Text style={styles.bulletResultDot}>•</Text>
+                          <Text style={styles.bulletResultText}>{entry}</Text>
+                        </View>
+                      ))
+                    ) : (
+                      <Text style={styles.bulletResultEmpty}>
+                        생성된 개조식 요약이 없습니다. 다시 분석해 주세요.
+                      </Text>
+                    )}
+                  </View>
+
                   <View style={styles.keywordWrap}>
                     <View style={styles.categoryResultChip}>
                       <Text style={styles.categoryResultText}>
@@ -367,6 +395,20 @@ export default function AddScreen() {
 }
 
 const styles = StyleSheet.create({
+  bulletResultBox: {
+    backgroundColor: '#EEF6EF',
+    borderWidth: 1,
+    borderColor: '#D3E5D8',
+    borderRadius: 15,
+    padding: 14,
+    marginBottom: 16,
+  },
+  bulletResultHeading: { flexDirection: 'row', alignItems: 'center', gap: 7, marginBottom: 12 },
+  bulletResultTitle: { color: '#195C3E', fontSize: 14, fontWeight: '900' },
+  bulletResultLine: { flexDirection: 'row', alignItems: 'flex-start', gap: 8, marginBottom: 7 },
+  bulletResultDot: { color: '#1F6B45', fontSize: 15, fontWeight: '900', lineHeight: 21 },
+  bulletResultText: { flex: 1, minWidth: 0, color: '#353C37', fontSize: 13, lineHeight: 21 },
+  bulletResultEmpty: { color: '#7D887F', fontSize: 12, lineHeight: 19 },
   screen: {
     flex: 1,
     backgroundColor: '#e8e4dc',
