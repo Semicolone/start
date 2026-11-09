@@ -1,4 +1,5 @@
 import os
+from collections import defaultdict
 from datetime import datetime
 
 from fastapi import APIRouter, Depends, Header, HTTPException
@@ -32,26 +33,37 @@ def send_reminders(db: Session = Depends(get_db)):
         Insight.reminded_at.is_(None),
     ).all()
 
+    by_user = defaultdict(list)
+    for insight in insights:
+        by_user[insight.user_email].append(insight)
+
     sent = 0
     skipped = 0
     failed = 0
 
-    for insight in insights:
-        user = db.query(User).filter(User.email == insight.user_email).first()
+    for user_email, user_insights in by_user.items():
+        user = db.query(User).filter(User.email == user_email).first()
         if not user or not user.push_token or not user.reminder_enabled:
             skipped += 1
             continue
 
-        keyword = (insight.keywords or [None])[0] or DEFAULT_KEYWORD
+        count = len(user_insights)
+        keyword = (user_insights[0].keywords or [None])[0] or DEFAULT_KEYWORD
+        body = (
+            f"{keyword}에 대해 기억나시나요?"
+            if count == 1
+            else f"{keyword} 외 {count - 1}건 복습할 시간이에요"
+        )
 
         try:
             send_push_notification(
                 push_token=user.push_token,
                 title=REMINDER_TITLE,
-                body=f"{keyword}에 대해 기억나시나요?",
-                data={"insight_id": insight.id},
+                body=body,
+                data={"insight_ids": [i.id for i in user_insights]},
             )
-            insight.reminded_at = datetime.utcnow()
+            for insight in user_insights:
+                insight.reminded_at = datetime.utcnow()
             sent += 1
         except Exception:
             failed += 1
