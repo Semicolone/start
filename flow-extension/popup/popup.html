@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width">
+  <title>FLOW</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+
+  <!-- 로그인 전 화면 -->
+  <div id="login-view">
+    <div class="logo">
+      <span class="logo-icon">🌿</span>
+      <span class="logo-text">FLOW</span>
+    </div>
+    <p class="subtitle">AI 대화가 내 지식이 되는 순간</p>
+
+    <div class="form">
+      <input
+        type="email"
+        id="email"
+        placeholder="이메일"
+        class="input"
+      />
+      <input
+        type="password"
+        id="password"
+        placeholder="비밀번호"
+        class="input"
+      />
+      <button id="login-btn" class="btn-primary">
+        로그인
+      </button>
+      <p id="error-msg" class="error-msg"></p>
+    </div>
+  </div>
+
+  <!-- 로그인 후 화면 -->
+  <div id="main-view" style="display:none;">
+    <div class="logo">
+      <span class="logo-icon">🌿</span>
+      <span class="logo-text">FLOW</span>
+    </div>
+
+    <div class="user-info">
+      <span id="user-name">지수님</span>
+      <span class="welcome">안녕하세요 👋</span>
+    </div>
+
+    <div class="stats">
+      <div class="stat-item">
+        <div class="stat-num" id="today-count">0</div>
+        <div class="stat-label">오늘 수집</div>
+      </div>
+      <div class="stat-item">
+        <div class="stat-num" id="total-count">0</div>
+        <div class="stat-label">전체 수집</div>
+      </div>
+    </div>
+
+    <div class="platform-row">
+      <span class="platform-badge chatgpt">ChatGPT</span>
+      <span class="platform-badge claude">Claude</span>
+      <span class="platform-badge gemini">Gemini</span>
+    </div>
+
+    <div class="toggle-row">
+      <span class="toggle-label">자동 수집</span>
+      <label class="toggle">
+        <input type="checkbox" id="collect-toggle" checked>
+        <span class="slider"></span>
+      </label>
+    </div>
+
+    <button id="logout-btn" class="btn-logout">
+      로그아웃
+    </button>
+  </div>
+
+  <script src="popup.js"></script>
+</body>
+</html>
